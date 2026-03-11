@@ -1,0 +1,88 @@
+server:
+  port: 8090
+  tomcat:
+    uri-encoding: UTF-8
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      server:
+        webflux:
+          # 路由规则
+          routes:
+            # 示例接口服务路由
+            - id: api-demo-service
+              uri: http://localhost:9003  # 你的业务接口地址
+              predicates:
+                - Path=/api/**
+              filters:
+                - StripPrefix=1
+          # 全局跨域配置
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                allowedOrigins: "*"
+                allowedMethods:
+                  - GET
+                  - POST
+                  - PUT
+                  - DELETE
+                allowedHeaders: "*"
+                allowCredentials: false
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    # 连接超时时间（毫秒）
+    connection-timeout: 60000
+    # 心跳间隔（秒），防止连接超时断开
+    requested-heartbeat: 30
+    # 自动恢复连接
+    listener:
+      simple:
+        retry:
+          enabled: true
+          initial-interval: 1000
+          max-attempts: 3
+          max-interval: 10000
+        acknowledge-mode: auto
+        prefetch: 1
+    # 定义队列名称（常量）
+    queue:
+      log: api.call.log.queue
+
+  # 数据库
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/api_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: root
+    password: 123456
+
+  # Redis
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+      timeout: 10000
+      lettuce:
+        pool:
+          max-active: 32
+          max-wait: -1
+          max-idle: 16
+          min-idle: 8
+
+# MyBatis-Plus
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  mapper-locations: classpath:mapper/*.xml
+
+api:
+  gateway:
+    sign-expire: 5
+    default-limit-count: 100
+    default-limit-period: 60

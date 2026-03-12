@@ -5,6 +5,8 @@ import com.api.apiadmin.config.Result;
 import com.api.apiadmin.entity.User;
 import com.api.apiadmin.mapper.UserMapper;
 import com.api.apiadmin.util.JwtUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,6 +52,7 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         // 5. 返回成功 + token
         return Result.ok(token);
     }
+    
     public Result logout(HttpServletRequest request) {
         Long userId = (Long) request.getAttribute("userId");
         String redisKey = "login:user:" + userId;
@@ -69,6 +72,34 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         user.setUpdateTime( null);
         userMapper.insert(user);
         return Result.ok("注册成功");
+    }
+
+    public Result selectPage(Integer pageNum, Integer pageSize) {
+        Page<User> page = new Page<>(pageNum, pageSize);
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+        wrapper.orderByDesc(User::getCreateTime);
+        Page<User> result = page(page, wrapper);
+        // 移除密码字段
+        result.getRecords().forEach(user -> user.setPassword(null));
+        return Result.ok(result);
+    }
+
+    public Result updateStatus(Long id, Integer status) {
+        User user = getById(id);
+        if (user == null) {
+            return Result.error("用户不存在");
+        }
+        user.setStatus(status);
+        updateById(user);
+        return Result.ok("更新成功");
+    }
+
+    public Result deleteUser(Long id) {
+        if (id == null) {
+            return Result.error("用户ID不能为空");
+        }
+        removeById(id);
+        return Result.ok("删除成功");
     }
 
 }

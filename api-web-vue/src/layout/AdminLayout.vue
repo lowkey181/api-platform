@@ -24,6 +24,14 @@
           <el-icon><List /></el-icon>
           <span>应用管理</span>
         </el-menu-item>
+        <el-menu-item index="/admin/interfaces">
+          <el-icon><Connection /></el-icon>
+          <span>接口管理</span>
+        </el-menu-item>
+        <el-menu-item index="/admin/products">
+          <el-icon><ShoppingCart /></el-icon>
+          <span>产品套餐</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>

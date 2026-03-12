@@ -4,6 +4,7 @@ import com.api.apiadmin.config.SaResult;
 import com.api.apiadmin.entity.OrderInfo;
 import com.api.apiadmin.service.OrderInfoService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -17,7 +18,7 @@ public class OrderInfoController {
      * 返回订单信息
      */
     @RequestMapping("/create")
-    public SaResult create(OrderInfo orderInfo){
+    public SaResult create(@RequestBody OrderInfo orderInfo){
         return orderInfoService.insert(orderInfo);
     }
 }

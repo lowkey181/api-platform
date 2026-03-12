@@ -6,6 +6,7 @@ import com.api.apiadmin.service.ApiInterfaceService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ApiInterfaceController {
     @Autowired
     private ApiInterfaceService apiInterfaceService;
+    
     @RequestMapping("/insert")
     public Result insert(@RequestBody ApiInterface apiInterface) {
         return apiInterfaceService.insert(apiInterface);
@@ -24,12 +26,14 @@ public class ApiInterfaceController {
     }
 
     @RequestMapping("/delete")
-    public Result delete(Integer id) {
+    public Result delete(@RequestParam Integer id) {
         return apiInterfaceService.delete(id);
     }
 
     @RequestMapping("/selectPage")
-    public Result selectPage(Integer pageNum, Integer pageSize) {
-        return apiInterfaceService.selectPage(pageNum, pageSize);
+    public Result selectPage(@RequestParam(defaultValue = "1") Integer pageNum,
+                               @RequestParam(defaultValue = "10") Integer pageSize,
+                               @RequestParam(required = false) Integer status) {
+        return apiInterfaceService.selectPage(pageNum, pageSize, status);
     }
 }

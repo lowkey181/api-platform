@@ -23,5 +23,5 @@ public class ApiProduct {
     private String remark;          // 描述
 
     private Date createTime;
-    private Long productId;
+//    private Long productId;
 }

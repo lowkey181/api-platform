@@ -12,6 +12,8 @@
           class="user-menu"
         >
           <el-menu-item index="/user/home">主页</el-menu-item>
+          <el-menu-item index="/user/api-market">API市场</el-menu-item>
+          <el-menu-item index="/user/my-interfaces">我的接口</el-menu-item>
           <el-menu-item index="/user/my-apps">我的应用</el-menu-item>
           <el-menu-item v-if="userStore.isAdmin" index="/admin/dashboard">后台管理</el-menu-item>
         </el-menu>

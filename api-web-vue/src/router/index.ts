@@ -48,6 +48,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/admin/Apps.vue'),
         meta: { title: '应用管理' },
       },
+      {
+        path: 'interfaces',
+        name: 'AdminInterfaces',
+        component: () => import('@/views/admin/Interfaces.vue'),
+        meta: { title: '接口管理' },
+      },
+      {
+        path: 'products',
+        name: 'AdminProducts',
+        component: () => import('@/views/admin/Products.vue'),
+        meta: { title: '产品套餐' },
+      },
     ],
   },
   {
@@ -72,6 +84,18 @@ const routes: RouteRecordRaw[] = [
         name: 'UserApps',
         component: () => import('@/views/user/MyApps.vue'),
         meta: { title: '我的应用' },
+      },
+      {
+        path: 'api-market',
+        name: 'ApiMarket',
+        component: () => import('@/views/user/ApiMarket.vue'),
+        meta: { title: 'API市场' },
+      },
+      {
+        path: 'my-interfaces',
+        name: 'MyInterfaces',
+        component: () => import('@/views/user/MyInterfaces.vue'),
+        meta: { title: '我的接口' },
       },
     ],
   },

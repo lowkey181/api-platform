@@ -6,6 +6,7 @@ import com.api.apiadmin.entity.App;
 import com.api.apiadmin.mapper.AppMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.github.yulichang.wrapper.MPJLambdaWrapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -16,6 +17,16 @@ import java.util.List;
 public class AppService extends ServiceImpl<AppMapper, App> {
     @Autowired
     private AppMapper appMapper;
+
+    public List<String> getAllAccessKey(Long userId){
+        MPJLambdaWrapper<App> wrapper = new MPJLambdaWrapper<App>()
+                .select(App::getAccessKey)
+                .eq(App::getUserId, userId);
+        List<App> appList = appMapper.selectJoinList(wrapper);
+        return appList.stream()
+                .map(App::getAccessKey)
+                .collect(java.util.stream.Collectors.toList());
+    }
 
     // 根据用户ID查所有密钥
     public List<App> getByUserId(Long userId) {

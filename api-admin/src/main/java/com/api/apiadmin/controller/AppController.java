@@ -26,6 +26,14 @@ public class AppController {
     @PreAuthorize("isAuthenticated()")
     @PostMapping("/key/create")
     public Result createKey(@RequestParam String appName) {
-        return Result.ok(appService.insert(appName));
+        return appService.insert(appName);
+    }
+
+    @PreAuthorize("isAuthenticated()")
+    @RequestMapping("/list")
+    public Result listApps() {
+        Long userId = (Long) org.springframework.security.core.context.SecurityContextHolder
+                .getContext().getAuthentication().getPrincipal();
+        return Result.ok(appService.getByUserId(userId));
     }
 }

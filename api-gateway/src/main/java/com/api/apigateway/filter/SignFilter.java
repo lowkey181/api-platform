@@ -3,10 +3,14 @@ package com.api.apigateway.filter;
 import cn.hutool.core.util.StrUtil;
 import com.api.apigateway.config.SaResult;
 import com.api.apigateway.enity.ApiCallLogDTO;
+import com.api.apigateway.enity.Blacklist;
+import com.api.apigateway.mapper.BlackListMapper;
 import com.api.apigateway.utils.IpUtil;
 import com.api.apigateway.utils.SignUtil;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -41,6 +45,8 @@ public class SignFilter implements GlobalFilter, Ordered {
     private RabbitTemplate rabbitTemplate;
     @Value("${spring.rabbitmq.queue.log}")
     private String logQueue;
+    @Autowired
+    private BlackListMapper blackListMapper;
     // 注入 WebClient
     private final WebClient webClient = WebClient.create("http://localhost:9002");
 
@@ -53,6 +59,37 @@ public class SignFilter implements GlobalFilter, Ordered {
         String nonce = exchange.getRequest().getHeaders().getFirst("nonce");
 
         log.info("接收到请求: accessKey={}, sign={}, timestamp={}, nonce={}", accessKey, sign, timestamp, nonce);
+        // 1. =============黑名单检查=========
+        log.info("开始检查黑名单");
+        ServerHttpRequest request = exchange.getRequest();
+        String clientIp = IpUtil.getClientIp(request);
+
+        // 查 IP 是否在黑名单（且状态=1）
+        Boolean isIpBlack = redisTemplate.hasKey("blacklist:ip:" + clientIp);
+//        boolean isIpBlack = blackListMapper.exists(new QueryWrapper<Blacklist>()
+//                .eq("ip", clientIp)
+//                .eq("status", 1));
+
+        // 查 accessKey 是否在黑名单（且状态=1）
+        boolean isAkBlack = false;
+        if (accessKey != null) {
+            isAkBlack = redisTemplate.hasKey("blacklist:accessKey:" + accessKey);
+        }
+//        boolean isAkBlack = false;
+//        if (accessKey != null) {
+//            isAkBlack = blackListMapper.exists(new QueryWrapper<Blacklist>()
+//                    .eq("access_key", accessKey)
+//                    .eq("status", 1));
+//        }
+
+
+        // 任意命中 → 直接拒绝
+        if (isIpBlack || isAkBlack) {
+            exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+            return exchange.getResponse().setComplete();
+        }
+        log.info("黑名单检查结束,不在黑名单之列");
+        //====================================
         // 1. 判空（不变）
         if (StrUtil.isBlank(accessKey) || StrUtil.isBlank(sign) || StrUtil.isBlank(timestamp) || StrUtil.isBlank(nonce)) {
             exchange.getResponse().setStatusCode(HttpStatus.BAD_REQUEST);
@@ -70,7 +107,7 @@ public class SignFilter implements GlobalFilter, Ordered {
         // 3. nonce 防重放（核心！新增！）
         String nonceKey = "sign:nonce:" + nonce;
         Boolean hasNonce = redisTemplate.hasKey(nonceKey);
-        if (Boolean.TRUE.equals(hasNonce)) {
+        if (hasNonce) {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
@@ -123,7 +160,7 @@ public class SignFilter implements GlobalFilter, Ordered {
 
         return webClient.post()
                 .uri("/userInterfaceAuth/callApi")
-                .header("Authorization", "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIiwidXNlcm5hbWUiOiJhZG1pbiIsInJvbGUiOiJBRE1JTiIsImV4cCI6MTc3MzA2Njk1Nn0.nyMYc61qw7NSxGf_lekw_cREftViPilcJk2-Q_CmpuM")
+                .header("Authorization")
                 .bodyValue(params)
                 .retrieve()
                 .bodyToMono(SaResult.class)

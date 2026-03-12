@@ -2,6 +2,7 @@ import axios from 'axios'
 import type { AxiosInstance, AxiosResponse } from 'axios'
 import { ElMessage } from 'element-plus'
 import { signUtil } from './sign'
+import {signApi} from "@/api/sign.ts";
 
 // 定义接口返回数据类型
 export interface Result<T = any> {
@@ -26,10 +27,10 @@ service.interceptors.request.use(
     // --- 网关验签逻辑 ---
     // 从 localStorage 获取当前用户的应用密钥信息
     const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-    const { accessKey, secretKey } = userInfo
+    const { accessKey} = userInfo
 
     // 只有当 accessKey 和 secretKey 存在时才添加验签头
-    if (accessKey && secretKey) {
+    if (accessKey) {
       const timestamp = Date.now().toString()
       const nonce = signUtil.generateNonce()
       
@@ -38,9 +39,10 @@ service.interceptors.request.use(
         timestamp,
         nonce
       }
+      const sign=signApi.sign(signParams)
 
       // 生成签名
-      const sign = signUtil.generateSign(signParams, secretKey)
+      // const sign = signUtil.generateSign(signParams, secretKey)
 
       // 注入网关要求的 4 个请求头
       config.headers['accessKey'] = accessKey

@@ -1,6 +1,7 @@
 package com.api.apigateway.filter;
 
 import cn.hutool.core.util.StrUtil;
+import com.api.apigateway.config.GatewayConfig;
 import com.api.apigateway.config.SaResult;
 import com.api.apigateway.enity.ApiCallLogDTO;
 import com.api.apigateway.enity.Blacklist;
@@ -12,20 +13,25 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
+import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.core.Ordered;
 import org.springframework.stereotype.Component;
 import jakarta.annotation.Resource;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -49,14 +55,21 @@ public class SignFilter implements GlobalFilter, Ordered {
     private BlackListMapper blackListMapper;
     // 注入 WebClient
     private final WebClient webClient = WebClient.create("http://localhost:9002");
-
+    // ========== 【新增】用于存储改写后的请求体和响应体 ==========
+    private String modifiedRequestBody;
+    private String modifiedResponseBody;
+    private String errorMsg;
+    private long useTime;
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        // ========== 1. 全局记录开始时间（整个请求的起点） ==========
+        long startTime = System.currentTimeMillis();
         // 获取你原来的 4 个请求头（不变！）
         String accessKey = exchange.getRequest().getHeaders().getFirst("accessKey");
         String sign = exchange.getRequest().getHeaders().getFirst("sign");
         String timestamp = exchange.getRequest().getHeaders().getFirst("timestamp");
         String nonce = exchange.getRequest().getHeaders().getFirst("nonce");
+        String Authorization= exchange.getRequest().getHeaders().getFirst("Authorization");
 
         log.info("接收到请求: accessKey={}, sign={}, timestamp={}, nonce={}", accessKey, sign, timestamp, nonce);
         // 1. =============黑名单检查=========
@@ -160,36 +173,67 @@ public class SignFilter implements GlobalFilter, Ordered {
 
         return webClient.post()
                 .uri("/userInterfaceAuth/callApi")
-                .header("Authorization")
+                .header("Content-Type", "application/json")
+                .header("Authorization", Authorization)
                 .bodyValue(params)
                 .retrieve()
                 .bodyToMono(SaResult.class)
                 .flatMap(result -> {
                     if (result.isSuccess()) {
-                        log.info("调用权限校验成功: userId={}, interfaceId={}", userId, interfaceId);
-                        
-                        // ====================== 存储日志到 MQ ======================
-                        sendCallLogToMQ(exchange, userId, interfaceId, accessKey);
-                        
-                        // 校验通过 → 放行
-                        return chain.filter(exchange);
+                        log.info("权限校验成功");
+                        // ======================
+                        // 这里只放行！不发日志！不统计时间！
+                        // ======================
+                        // ========== 【新增】在响应阶段获取处理后的响应体 ==========
+                        // 注意：此时响应体可能还未完全生成，需要在响应写入后获取
+                        return chain.filter(exchange)
+                                .doOnSuccess(v -> {//this加不加都行
+                                    this.modifiedResponseBody = (String) exchange.getAttributes().get(GatewayConfig.MODIFIED_RESPONSE_BODY_ATTR);
+                                    if (modifiedResponseBody != null) {
+                                        log.info("SignFilter 获取到改写后的响应体：{}", modifiedResponseBody);
+                                        // 可以在这里使用 modifiedResponseBody 进行业务处理
+                                    }
+                                });
                     } else {
-                        log.warn("权限校验失败: {}", result.getMsg());
+                        log.error("权限校验失败");
                         exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
                         return exchange.getResponse().setComplete();
                     }
                 })
+                // ========== 3. 【整个请求全部结束后】才统计时间 + 发日志 ==========
+                .doFinally(signalType -> {
+                    // ---------- 这里才是真正的总耗时！----------
+                    useTime = System.currentTimeMillis() - startTime;
+                    // ========== 【新增】从 Attribute 中获取处理后的请求体 ==========
+                    this.modifiedRequestBody = (String) exchange.getAttributes().get(GatewayConfig.MODIFIED_REQUEST_BODY_ATTR);
+                    if (modifiedRequestBody != null) {
+                        log.info("SignFilter 获取到改写后的请求体：{}", modifiedRequestBody);
+                        // 可以在这里使用 modifiedRequestBody 进行业务处理
+                    }
+
+                    // ---------- 权限成功才发送日志 ----------
+                    if (exchange.getResponse().getStatusCode() == HttpStatus.OK) {
+                        System.out.println(modifiedRequestBody+modifiedResponseBody);
+                        sendCallLogToMQ(exchange, userId, interfaceId, accessKey, useTime, modifiedResponseBody,modifiedRequestBody,null);
+                    }
+                })
                 .onErrorResume(e -> {
-                    log.error("权限校验服务异常: {}", e.getMessage());
+                    log.error("服务异常", e);
+                    errorMsg=e.getMessage();
+                    sendCallLogToMQ(exchange, userId, interfaceId, accessKey, useTime, modifiedResponseBody,modifiedRequestBody,errorMsg);
                     exchange.getResponse().setStatusCode(HttpStatus.INTERNAL_SERVER_ERROR);
                     return exchange.getResponse().setComplete();
                 });
+
     }
 
     /**
      * 发送调用日志到 MQ
      */
-    private void sendCallLogToMQ(ServerWebExchange exchange, long userId, Integer interfaceId, String accessKey) {
+    private void sendCallLogToMQ(ServerWebExchange exchange, long userId,
+                                 Integer interfaceId, String accessKey,
+                                 long useTime,String modifiedResponseBody,
+                                 String modifiedRequestBody,String errorMsg) {
         ServerHttpRequest request = exchange.getRequest();
         String requestIp = IpUtil.getClientIp(request);
 
@@ -200,7 +244,14 @@ public class SignFilter implements GlobalFilter, Ordered {
         }
         logDto.setAccessKey(accessKey);
         logDto.setRequestIp(requestIp);
+        if(errorMsg!= null){
+            logDto.setErrorMsg(errorMsg);
+            logDto.setStatus(0);
+        }
         logDto.setStatus(1);
+        logDto.setUseTime(useTime);
+        logDto.setRequestParams(modifiedRequestBody);
+        logDto.setResponseResult(modifiedResponseBody);
 
         // 异步发送！不阻塞网关！
         rabbitTemplate.convertAndSend(logQueue, logDto);

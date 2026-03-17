@@ -59,6 +59,8 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { authApi } from '@/api/auth'
+import { invokeApi } from '@/api/invoke'
+import { signApi } from '@/api/sign'
 import { useUserStore } from '@/store/user'
 
 const userStore = useUserStore()
@@ -67,6 +69,7 @@ const pageSize = ref(10)
 const total = ref(0)
 const tableData = ref<any[]>([])
 const loading = ref(false)
+const callLoading = ref(false)
 
 const loadData = async () => {
   loading.value = true
@@ -82,12 +85,38 @@ const loadData = async () => {
 }
 
 const handleCall = async (row: any) => {
+  if (callLoading.value) return
+  callLoading.value = true
   try {
-    const res = await authApi.callApi(userStore.userInfo.id, row.interfaceId)
+    // 1. 每次调用时重新生成 timestamp 和 nonce，并获取新的 sign
+    const signRes = await signApi.generate()
+    if (!signRes.data) {
+      ElMessage.error('获取签名失败')
+      return
+    }
+    
+    const { accessKey, timestamp, nonce, sign } = signRes.data
+    const Authorization = `Bearer ${userStore.token}`
+    
+    if (!accessKey || !sign || !timestamp || !nonce) {
+      ElMessage.error('签名信息不完整')
+      return
+    }
+    
+    // 2. 通过后端代理调用接口（后端通过 RestTemplate 调用网关）
+    const response = await invokeApi.invoke(row.interfaceId, accessKey, sign, timestamp, nonce,Authorization)
+    
     ElMessage.success('调用成功')
+    // 显示调用结果
+    if (response.data) {
+      const resultStr = JSON.stringify(response.data).substring(0, 100)
+      ElMessage.info(`返回结果: ${resultStr}...`)
+    }
     loadData() // 刷新数据
-  } catch (error) {
-    // Error handled by interceptor
+  } catch (error: any) {
+    ElMessage.error(`调用失败: ${error.message || '未知错误'}`)
+  } finally {
+    callLoading.value = false
   }
 }
 

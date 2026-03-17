@@ -1,6 +1,7 @@
 package com.api.apiadmin.controller;
 
 import com.api.apiadmin.config.Result;
+import com.api.apiadmin.config.SaResult;
 import com.api.apiadmin.mapper.AppMapper;
 import com.api.apiadmin.service.AppService;
 import jakarta.annotation.Resource;
@@ -35,5 +36,19 @@ public class AppController {
         Long userId = (Long) org.springframework.security.core.context.SecurityContextHolder
                 .getContext().getAuthentication().getPrincipal();
         return Result.ok(appService.getByUserId(userId));
+    }
+    @PreAuthorize("isAuthenticated()")
+    @RequestMapping("/admin/list")
+    public Result AllApps() {
+        return Result.ok(appService.getAllApps());
+    }
+
+    /**
+     * 获取应用数量,不包括禁用的
+     */
+    @PreAuthorize("isAuthenticated()")
+    @RequestMapping("/admin/count")
+    public SaResult getAppCount() {
+        return appService.getAppCount();
     }
 }

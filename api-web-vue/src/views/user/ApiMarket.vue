@@ -78,7 +78,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { interfaceApi } from '@/api/interface'
 import { productApi } from '@/api/product'
@@ -97,27 +97,43 @@ const productLoading = ref(false)
 const currentInterface = ref<any>(null)
 
 const loadInterfaces = async () => {
+  if (loading.value) return // 防止重复加载
   loading.value = true
   try {
     const res = await interfaceApi.selectPage(pageNum.value, pageSize.value, 1)
-    interfaceList.value = res.data.records || []
-    total.value = res.data.total || 0
+    // 确保数据结构正确
+    if (res.data && typeof res.data === 'object') {
+      interfaceList.value = Array.isArray(res.data.records) ? res.data.records : []
+      total.value = res.data.total || 0
+    } else {
+      interfaceList.value = []
+      total.value = 0
+    }
   } catch (error) {
-    // Error handled by interceptor
+    console.error('加载接口列表失败:', error)
+    interfaceList.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }
 }
 
 const viewProducts = async (item: any) => {
+  if (productLoading.value) return // 防止重复加载
   currentInterface.value = item
   productDialogVisible.value = true
   productLoading.value = true
   try {
     const res = await productApi.selectPage(1, 100, item.id, 1)
-    productList.value = res.data.records || []
+    // 确保数据结构正确
+    if (res.data && typeof res.data === 'object') {
+      productList.value = Array.isArray(res.data.records) ? res.data.records : []
+    } else {
+      productList.value = []
+    }
   } catch (error) {
-    // Error handled by interceptor
+    console.error('加载产品列表失败:', error)
+    productList.value = []
   } finally {
     productLoading.value = false
   }
@@ -126,16 +142,35 @@ const viewProducts = async (item: any) => {
 const handleBuy = async (product: any) => {
   try {
     const res = await orderApi.createOrder(product.id)
-    // 支付宝返回的是HTML表单，直接渲染到页面
-    const div = document.createElement('div')
-    div.innerHTML = res.data
-    document.body.appendChild(div)
-    const form = div.querySelector('form')
-    if (form) {
-      form.submit()
+    // 支付宝返回的是HTML表单，直接使用响应数据
+    const htmlForm = res.data
+    
+    if (!htmlForm || typeof htmlForm !== 'string') {
+      ElMessage.error('获取支付表单失败')
+      return
     }
-  } catch (error) {
-    ElMessage.error('创建订单失败')
+    
+    // 创建临时容器并提交表单
+    const tempDiv = document.createElement('div')
+    tempDiv.innerHTML = htmlForm
+    const form = tempDiv.querySelector('form') as HTMLFormElement
+    
+    if (form) {
+      document.body.appendChild(form)
+      form.submit()
+      // 表单提交后移除
+      setTimeout(() => {
+        if (form.parentNode) {
+          form.parentNode.removeChild(form)
+        }
+      }, 100)
+      ElMessage.success('正在跳转到支付宝...')
+    } else {
+      ElMessage.error('支付表单格式错误')
+    }
+  } catch (error: any) {
+    console.error('创建订单失败:', error)
+    ElMessage.error(`创建订单失败: ${error.message || '未知错误'}`)
   }
 }
 

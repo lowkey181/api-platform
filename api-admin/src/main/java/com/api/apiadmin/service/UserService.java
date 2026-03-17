@@ -2,6 +2,7 @@ package com.api.apiadmin.service;
 
 import cn.hutool.crypto.digest.BCrypt;
 import com.api.apiadmin.config.Result;
+import com.api.apiadmin.config.SaResult;
 import com.api.apiadmin.entity.User;
 import com.api.apiadmin.mapper.UserMapper;
 import com.api.apiadmin.util.JwtUtil;
@@ -100,6 +101,13 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         }
         removeById(id);
         return Result.ok("删除成功");
+    }
+    // 获取用户数量,不包括禁用的
+    public SaResult getUserCount() {
+        Long count = count(new LambdaQueryWrapper<User>()
+                .eq(User::getRole, "USER")
+                .eq(User::getStatus, 1));//1表示正常，0表示禁用
+        return SaResult.ok().setData(count);
     }
 
 }

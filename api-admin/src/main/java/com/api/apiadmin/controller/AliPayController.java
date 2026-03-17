@@ -4,6 +4,7 @@ package com.api.apiadmin.controller;
 import com.alipay.api.AlipayApiException;
 import com.alipay.api.internal.util.AlipaySignature;
 import com.api.apiadmin.config.AlipayTemplate;
+import com.api.apiadmin.config.SaResult;
 import com.api.apiadmin.entity.OrderInfo;
 import com.api.apiadmin.entity.PayRecord;
 import com.api.apiadmin.entity.UserRecharge;
@@ -62,6 +63,45 @@ public class AliPayController {
             return "success";
         }
         return alipayTemplate.pay(order);
+    }
+
+    @GetMapping("/createOrder")
+    public String createOrder(@RequestParam Long productId) throws AlipayApiException {
+        Long userId = (Long) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        
+        try {
+            // 1. 根据 productId 获取产品信息
+            com.api.apiadmin.entity.ApiProduct product = apiProductService.getById(productId);
+            if (product == null) {
+                log.error("产品不存在: {}", productId);
+                return "error: 产品不存在";
+            }
+            
+            // 2. 创建订单
+            OrderInfo order = new OrderInfo();
+            order.setUserId(userId);
+            order.setInterfaceId(product.getInterfaceId());
+            order.setProductId(productId);
+            order.setTotalAmount(product.getPrice());
+            order.setPaymentMethod("支付宝");
+            
+            SaResult result = orderInfoService.insert(order);
+            if (result.getCode() != 200) {
+                log.error("创建订单失败: {}", result.getMsg());
+                return "error: " + result.getMsg();
+            }
+            
+            OrderInfo createdOrder = (OrderInfo) result.getData();
+            log.info("订单创建成功，订单号: {}, 金额: {}", createdOrder.getOrderNo(), createdOrder.getTotalAmount());
+            
+            // 3. 发起支付 - 调用支付宝接口生成支付表单
+            String payForm = alipayTemplate.pay(createdOrder);
+            log.info("支付表单生成成功，长度: {}", payForm != null ? payForm.length() : 0);
+            return payForm;
+        } catch (Exception e) {
+            log.error("创建订单或发起支付失败", e);
+            return "error: " + e.getMessage();
+        }
     }
 
     @PostMapping("/notify")
@@ -129,6 +169,7 @@ public class AliPayController {
 
                     // 2. 写入支付记录pay_record
                     PayRecord payRecord = new PayRecord();
+                    payRecord.setOrderId(dbOrder.getId());
                     payRecord.setOrderNo(outTradeNo);
                     payRecord.setUserId(dbOrder.getUserId());
                     payRecord.setPayAmount(new BigDecimal(alipayTotalAmount));
@@ -143,6 +184,7 @@ public class AliPayController {
 
                     // 4. 写入用户充值记录user_recharge
                     UserRecharge userRecharge = new UserRecharge();
+                    userRecharge.setOrderId(dbOrder.getId());
                     userRecharge.setUserId(dbOrder.getUserId());
                     userRecharge.setInterfaceId(dbOrder.getInterfaceId());
                     userRecharge.setRechargeAmount(BigDecimal.valueOf(apiProductService.getCallCountById(dbOrder.getProductId())));

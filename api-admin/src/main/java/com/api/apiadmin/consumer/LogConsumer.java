@@ -27,10 +27,10 @@ public class LogConsumer {
             log.setStatus(logDTO.getStatus());
             log.setCreateTime(logDTO.getCreateTime());
             // 其他字段留空
-            log.setRequestParams(null);
-            log.setResponseResult(null);
-            log.setUseTime(null);
-            log.setErrorMsg(null);
+            log.setRequestParams(logDTO.getRequestParams());
+            log.setResponseResult(logDTO.getResponseResult());
+            log.setUseTime(logDTO.getUseTime());
+            log.setErrorMsg(logDTO.getErrorMsg());
             // 插入数据库
             apiCallLogMapper.insert(log);
             System.out.println("日志入库成功：" + log);

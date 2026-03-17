@@ -1,8 +1,6 @@
 import axios from 'axios'
 import type { AxiosInstance, AxiosResponse } from 'axios'
 import { ElMessage } from 'element-plus'
-import { signUtil } from './sign'
-import {signApi} from "@/api/sign.ts";
 
 // 定义接口返回数据类型
 export interface Result<T = any> {
@@ -24,32 +22,9 @@ service.interceptors.request.use(
       config.headers['Authorization'] = `Bearer ${token}`
     }
 
-    // --- 网关验签逻辑 ---
-    // 从 localStorage 获取当前用户的应用密钥信息
-    const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-    const { accessKey} = userInfo
-
-    // 只有当 accessKey 和 secretKey 存在时才添加验签头
-    if (accessKey) {
-      const timestamp = Date.now().toString()
-      const nonce = signUtil.generateNonce()
-      
-      const signParams = {
-        accessKey,
-        timestamp,
-        nonce
-      }
-      const sign=signApi.sign(signParams)
-
-      // 生成签名
-      // const sign = signUtil.generateSign(signParams, secretKey)
-
-      // 注入网关要求的 4 个请求头
-      config.headers['accessKey'] = accessKey
-      config.headers['sign'] = sign
-      config.headers['timestamp'] = timestamp
-      config.headers['nonce'] = nonce
-    }
+    // 注意：网关验签头（accessKey, sign, timestamp, nonce）不在这里添加
+    // 这些头只在调用网关时动态生成，见 MyInterfaces.vue 的 handleCall 函数
+    // 每次调用接口时都需要新的 timestamp 和 nonce，不能存储在 localStorage
 
     return config
   },

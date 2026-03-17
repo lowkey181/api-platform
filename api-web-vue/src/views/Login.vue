@@ -31,6 +31,7 @@ import { useUserStore } from '@/store/user'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { userApi } from '@/api/user'
+import { signApi } from '@/api/sign'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -54,11 +55,26 @@ const handleLogin = async () => {
     if (valid) {
       loading.value = true
       try {
-        console.log(localStorage.getItem('token'))
         const res = await userApi.login(loginForm)
         userStore.setToken(res.data)
         const resInfo = await userApi.getInfo()
-        userStore.setUserInfo(resInfo.data)
+        
+        // 获取用户的 accessKey（用于后续调用接口时生成签名）
+        let userInfoData = resInfo.data
+        try {
+          const signRes = await signApi.generate()
+          if (signRes.data) {
+            // 只保存 accessKey，timestamp 和 nonce 在每次调用接口时动态生成
+            userInfoData = {
+              ...userInfoData,
+              accessKey: signRes.data.accessKey,
+            }
+          }
+        } catch (signError) {
+          console.warn('获取 accessKey 失败，继续使用基本用户信息', signError)
+        }
+        
+        userStore.setUserInfo(userInfoData)
         ElMessage.success('登录成功')
         if (userStore.isAdmin) {
           await router.push('/admin/dashboard')

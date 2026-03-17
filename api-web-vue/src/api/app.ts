@@ -11,4 +11,7 @@ export const appApi = {
   listApps: () => {
     return request.get<Result>('/user/app/list')
   },
+  allApps: () => {
+    return request.get<Result>('/user/app/admin/list')
+  },
 }

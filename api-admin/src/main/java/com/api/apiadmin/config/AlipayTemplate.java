@@ -63,13 +63,13 @@ public class AlipayTemplate {
         alipayRequest.setReturnUrl(returnUrl);
         alipayRequest.setNotifyUrl(notifyUrl);
 
-        Long id = order.getId();
+        String outTradeNo = order.getOrderNo();
         Long interfaceInfoId = order.getInterfaceId();
         BigDecimal money = order.getTotalAmount();
         String paymentMethod = order.getPaymentMethod();
 
 
-        alipayRequest.setBizContent(" {\"out_trade_no\":\"" + id + "\","
+        alipayRequest.setBizContent(" {\"out_trade_no\":\"" + outTradeNo + "\","
                 + "\"total_amount\":\"" + money + "\","
                 + "\"subject\":\"" + interfaceInfoId
                 + "\","

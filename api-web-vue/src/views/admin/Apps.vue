@@ -51,7 +51,7 @@ const loading = ref(false)
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await appApi.listApps()
+    const res = await appApi.allApps()
     const apps = res.data || []
     // 简单分页处理
     const start = (pageNum.value - 1) * pageSize.value

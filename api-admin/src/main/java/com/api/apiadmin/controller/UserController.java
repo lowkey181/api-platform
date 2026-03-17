@@ -1,6 +1,7 @@
 package com.api.apiadmin.controller;
 
 import com.api.apiadmin.config.Result;
+import com.api.apiadmin.config.SaResult;
 import com.api.apiadmin.entity.User;
 import com.api.apiadmin.service.AppService;
 import com.api.apiadmin.service.UserService;
@@ -77,5 +78,10 @@ public class UserController {
     @RequestMapping("/delete")
     public Result deleteUser(@RequestParam Long id) {
         return userService.deleteUser(id);
+    }
+    // 获取用户数量,不包括禁用的
+    @RequestMapping("/getUserCount")
+    public SaResult getUserCount() {
+        return userService.getUserCount();
     }
 }

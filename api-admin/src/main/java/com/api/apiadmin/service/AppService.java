@@ -2,6 +2,7 @@ package com.api.apiadmin.service;
 
 import cn.hutool.core.util.RandomUtil;
 import com.api.apiadmin.config.Result;
+import com.api.apiadmin.config.SaResult;
 import com.api.apiadmin.entity.App;
 import com.api.apiadmin.mapper.AppMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -35,6 +36,11 @@ public class AppService extends ServiceImpl<AppMapper, App> {
                 .orderByDesc(App::getCreateTime));
     }
 
+    public List<App> getAllApps() {
+        return appMapper.selectList(null);
+    }
+
+
     // 根据accessKey查密钥（网关鉴权用）
     public App getByAccessKey(String accessKey) {
         return getOne(new LambdaQueryWrapper<App>()
@@ -62,5 +68,10 @@ public class AppService extends ServiceImpl<AppMapper, App> {
         return Result.ok("创建成功");
     }
 
+    public SaResult getAppCount() {
+        Long count = count(new LambdaQueryWrapper<App>()
+                .eq(App::getStatus, 1));
+        return SaResult.ok().setData(count);
+    }
 
 }

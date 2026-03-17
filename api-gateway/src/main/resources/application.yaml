@@ -19,6 +19,8 @@ spring:
                 - Path=/api/**
               filters:
                 - StripPrefix=1
+
+
           # 全局跨域配置
           globalcors:
             cors-configurations:
@@ -53,6 +55,7 @@ spring:
     # 定义队列名称（常量）
     queue:
       log: api.call.log.queue
+      blackList: api.black.list.queue
 
   # 数据库
   datasource:

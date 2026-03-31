@@ -66,7 +66,7 @@ api/
 1. 启动 **Redis** 和 **RabbitMQ**。
 2. 运行 `ApiAdminApplication` (端口: 9002)。
 3. 运行 `ApiGatewayApplication` (端口: 8090)。
-4. 运行 `ApiServiceApplication` (端口: 8123)。
+4. 运行 `ApiServiceApplication` (端口: 9003)。
 5. 进入 `api-web-vue` 执行 `npm install` 且 `npm run dev` 启动前端。
 
 ## 🛡️ 安全机制 (签名算法)

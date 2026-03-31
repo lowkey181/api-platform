@@ -7,6 +7,8 @@ import com.api.apiadmin.service.file.FileStorageFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -14,19 +16,24 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @RestController
 @RequestMapping("/api/file/chunk")
 @RequiredArgsConstructor
 public class ChunkUploadController {
+    private static final int MERGE_BUFFER_SIZE = 1024 * 1024;
 
     @Autowired
     private FileStorageFactory storageFactory;
@@ -36,12 +43,14 @@ public class ChunkUploadController {
     
     @Autowired
     private FileInfoService fileInfoService;
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+    @Value("${app.chunk.session-expire-hours:6}")
+    private long chunkSessionExpireHours;
 
     // 临时文件目录
     private static final String TEMP_DIR = System.getProperty("java.io.tmpdir") + "/file-upload/";
-    
-    // 记录正在上传的分片（用于清理）
-    private static final Map<String, Set<Integer>> uploadingChunks = new ConcurrentHashMap<>();
+    private static final String CHUNK_KEY_PREFIX = "chunk:upload:";
 
     /**
      * 初始化分片上传
@@ -80,9 +89,9 @@ public class ChunkUploadController {
             if (!tempDir.exists()) {
                 tempDir.mkdirs();
             }
-            
-            // 3. 记录上传信息
-            uploadingChunks.put(uploadId, ConcurrentHashMap.newKeySet());
+
+            // 3. 在 Redis 创建分片上传会话（支持多实例）
+            refreshChunkSession(uploadId);
             
             result.put("code", 200);
             result.put("data", new InitChunkResult(uploadId, tempDirPath));
@@ -125,10 +134,8 @@ public class ChunkUploadController {
             Files.copy(chunk.getInputStream(), chunkPath, StandardCopyOption.REPLACE_EXISTING);
             
             // 3. 记录已上传的分片
-            Set<Integer> chunks = uploadingChunks.get(uploadId);
-            if (chunks != null) {
-                chunks.add(chunkIndex);
-            }
+            redisTemplate.opsForSet().add(buildChunkRedisKey(uploadId), String.valueOf(chunkIndex));
+            refreshChunkSession(uploadId);
             
             log.info("分片 {}/{} 上传成功", chunkIndex, fileMd5);
             
@@ -171,8 +178,8 @@ public class ChunkUploadController {
             }
             
             // 2. 验证分片是否完整
-            Set<Integer> uploadedChunks = uploadingChunks.get(uploadId);
-            if (uploadedChunks == null || uploadedChunks.size() != totalChunks) {
+            Long uploadedChunkCount = redisTemplate.opsForSet().size(buildChunkRedisKey(uploadId));
+            if (uploadedChunkCount == null || uploadedChunkCount != totalChunks.longValue()) {
                 result.put("code", 400);
                 result.put("message", "分片不完整，请检查所有分片是否上传成功");
                 return ResponseEntity.badRequest().body(result);
@@ -180,13 +187,18 @@ public class ChunkUploadController {
             
             // 3. 合并分片
             File mergedFile = new File(TEMP_DIR + fileMd5 + ".tmp");
-            try (var outputStream = Files.newOutputStream(mergedFile.toPath())) {
+            try (OutputStream outputStream = new BufferedOutputStream(Files.newOutputStream(mergedFile.toPath()), MERGE_BUFFER_SIZE)) {
                 for (int i = 0; i < totalChunks; i++) {
                     String chunkFileName = String.format("%s_%d.chunk", fileMd5, i);
                     Path chunkPath = Paths.get(tempDirPath, chunkFileName);
                     if (Files.exists(chunkPath)) {
-                        byte[] chunkBytes = Files.readAllBytes(chunkPath);
-                        outputStream.write(chunkBytes);
+                        try (InputStream inputStream = new BufferedInputStream(Files.newInputStream(chunkPath), MERGE_BUFFER_SIZE)) {
+                            byte[] buffer = new byte[MERGE_BUFFER_SIZE];
+                            int bytesRead;
+                            while ((bytesRead = inputStream.read(buffer)) != -1) {
+                                outputStream.write(buffer, 0, bytesRead);
+                            }
+                        }
                     } else {
                         result.put("code", 400);
                         result.put("message", "分片 " + i + " 不存在");
@@ -238,7 +250,13 @@ public class ChunkUploadController {
     public ResponseEntity<Map<String, Object>> getUploadedChunks(@PathVariable String uploadId) {
         Map<String, Object> result = new HashMap<>();
         try {
-            Set<Integer> chunks = uploadingChunks.get(uploadId);
+            Set<String> chunkSet = redisTemplate.opsForSet().members(buildChunkRedisKey(uploadId));
+            Set<Integer> chunks = new HashSet<>();
+            if (chunkSet != null) {
+                for (String chunk : chunkSet) {
+                    chunks.add(Integer.parseInt(chunk));
+                }
+            }
             result.put("code", 200);
             result.put("data", chunks != null ? chunks : new HashSet<>());
             return ResponseEntity.ok(result);
@@ -273,8 +291,16 @@ public class ChunkUploadController {
             }
         }
         
-        // 清理记录
-        uploadingChunks.remove(uploadId);
+        // 清理 Redis 分片记录
+        redisTemplate.delete(buildChunkRedisKey(uploadId));
+    }
+
+    private String buildChunkRedisKey(String uploadId) {
+        return CHUNK_KEY_PREFIX + uploadId;
+    }
+
+    private void refreshChunkSession(String uploadId) {
+        redisTemplate.expire(buildChunkRedisKey(uploadId), chunkSessionExpireHours, TimeUnit.HOURS);
     }
 
     /**

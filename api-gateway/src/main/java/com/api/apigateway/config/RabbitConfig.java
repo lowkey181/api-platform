@@ -8,16 +8,10 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class RabbitConfig {
 
-    @Value("${spring.rabbitmq.queue.log}")
-    private String logQueue;
     @Value("${spring.rabbitmq.queue.blackList}")
     private String blackListQueue;
 
-    // 创建队列
-    @Bean
-    public Queue logQueue() {
-        return new Queue(logQueue, true); // 持久化队列
-    }
+    // 网关只负责发送日志消息，不在网关端声明日志队列（由 api-admin 统一声明并带 DLX 参数）
     @Bean
     public Queue blackListQueue() {
         return new Queue(blackListQueue, true);

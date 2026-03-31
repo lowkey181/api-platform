@@ -133,7 +133,7 @@ const loadData = async () => {
     tableData.value = res.data.records || []
     total.value = res.data.total || 0
   } catch (error) {
-    // Error handled by interceptor
+    // 拦截器处理的错误
   } finally {
     loading.value = false
   }

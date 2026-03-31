@@ -11,6 +11,13 @@ spring:
     url: jdbc:mysql://localhost:3306/api_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     username: root
     password: 123456
+    hikari:
+      maximum-pool-size: 40
+      minimum-idle: 10
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      validation-timeout: 5000
   rabbitmq:
     host: localhost
     port: 5672
@@ -23,16 +30,26 @@ spring:
     # 自动恢复连接
     listener:
       simple:
+        concurrency: 4
+        max-concurrency: 12
         retry:
           enabled: true
           initial-interval: 1000
           max-attempts: 3
           max-interval: 10000
         acknowledge-mode: auto
-        prefetch: 1
+        prefetch: 20
+        default-requeue-rejected: false
     # 定义队列名称（常量）
+    exchange:
+      log: api.call.log.exchange
+      log-dlx: api.call.log.dlx
     queue:
-      log: api.call.log.queue
+      log: api.call.log.v2.queue
+      log-dlq: api.call.log.dlq
+    routing:
+      log: api.call.log
+      log-dlq: api.call.log.dlq
 # 文件上传配置
   servlet:
     multipart:
@@ -63,10 +80,17 @@ mybatis-plus:
 
 # 自定义配置
 app:
+  chunk:
+    session-expire-hours: 6
+  mq:
+    failed-log-key: mq:failed:api-call-log
+    failed-log-max-size: 10000
   redis:
     cleanup-on-shutdown: true
     cleanup-patterns:
       - "login:user:*"
+      - "chunk:upload:*"
+      - "mq:failed:api-call-log"
   # 文件存储配置
   storage:
     # 存储类型：minio, oss

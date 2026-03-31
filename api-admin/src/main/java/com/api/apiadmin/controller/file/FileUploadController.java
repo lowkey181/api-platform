@@ -214,6 +214,9 @@ public class FileUploadController {
         if (List.of(".pdf", ".doc", ".docx", ".txt").contains(extension)) {
             return true;
         }
+        if (List.of(".xls", ".xlsx", ".ppt", ".pptx",".jar",".zip","war").contains(extension)) {
+            return true;
+        }
 
         return false;
     }

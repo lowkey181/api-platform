@@ -18,6 +18,9 @@ import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.cloud.client.circuitbreaker.ReactiveCircuitBreaker;
+import org.springframework.cloud.client.circuitbreaker.ReactiveCircuitBreakerFactory;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -49,17 +52,23 @@ public class SignFilter implements GlobalFilter, Ordered {
     private RedisTemplate<String, String> redisTemplate;
     @Resource
     private RabbitTemplate rabbitTemplate;
-    @Value("${spring.rabbitmq.queue.log}")
-    private String logQueue;
+    @Value("${spring.rabbitmq.exchange.log}")
+    private String logExchange;
+    @Value("${spring.rabbitmq.routing.log}")
+    private String logRoutingKey;
     @Autowired
     private BlackListMapper blackListMapper;
-    // 注入 WebClient
-    private final WebClient webClient = WebClient.create("http://localhost:9002");
-    // ========== 【新增】用于存储改写后的请求体和响应体 ==========
-    private String modifiedRequestBody;
-    private String modifiedResponseBody;
-    private String errorMsg;
-    private long useTime;
+    @Autowired
+    private ReactiveCircuitBreakerFactory<?, ?> circuitBreakerFactory;
+    @Value("${api.gateway.auth.base-url:http://localhost:9002}")
+    private String authBaseUrl;
+    @Value("${api.gateway.auth.timeout-ms:1500}")
+    private long authTimeoutMs;
+    @Value("${api.gateway.cache.app-auth-ttl-seconds:300}")
+    private long appAuthCacheTtlSeconds;
+    @Value("${api.gateway.cache.interface-ttl-seconds:300}")
+    private long interfaceCacheTtlSeconds;
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         // ==========  全局记录开始时间（整个请求的起点） ==========
@@ -131,9 +140,9 @@ public class SignFilter implements GlobalFilter, Ordered {
         String secretKey;
         long userId;
         try {
-            Map<String, Object> map = jdbcTemplate.queryForMap(sql, accessKey);
-            secretKey = (String) map.get("secret_key");
-            userId = Long.parseLong(map.get("user_id").toString());
+            AppAuthInfo appAuthInfo = queryAppAuthInfo(sql, accessKey);
+            secretKey = appAuthInfo.secretKey();
+            userId = appAuthInfo.userId();
         } catch (EmptyResultDataAccessException e) {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
@@ -159,7 +168,7 @@ public class SignFilter implements GlobalFilter, Ordered {
         String sql2 = "select id from api_interface where url = ? and status = 1";
         Integer interfaceId;
         try {
-            interfaceId = jdbcTemplate.queryForObject(sql2, new Object[]{interfacePath}, Integer.class);
+            interfaceId = queryInterfaceId(sql2, interfacePath);
         } catch (EmptyResultDataAccessException e) {
             // 接口不存在
             exchange.getResponse().setStatusCode(HttpStatus.NOT_FOUND);
@@ -170,54 +179,104 @@ public class SignFilter implements GlobalFilter, Ordered {
         Map<String, Object> params = new HashMap<>();
         params.put("userId", userId);
         params.put("interfaceId", interfaceId);
+        String modifiedRequestBody = (String) exchange.getAttributes().get(GatewayConfig.MODIFIED_REQUEST_BODY_ATTR);
+        String[] responseBodyHolder = new String[]{null};
+        String[] errorHolder = new String[]{null};
+        WebClient webClient = WebClient.builder().baseUrl(authBaseUrl).build();
+        ReactiveCircuitBreaker circuitBreaker = circuitBreakerFactory.create("adminAuth");
 
-        return webClient.post()
+        Mono<SaResult> authMono = webClient.post()
                 .uri("/userInterfaceAuth/callApi")
                 .header("Content-Type", "application/json")
                 .header("Authorization", Authorization)
                 .bodyValue(params)
                 .retrieve()
                 .bodyToMono(SaResult.class)
+                .timeout(Duration.ofMillis(authTimeoutMs));
+
+        return circuitBreaker.run(authMono, throwable -> {
+                    log.warn("权限校验降级触发: {}", throwable.getMessage());
+                    return Mono.just(SaResult.error("鉴权服务暂不可用"));
+                })
                 .flatMap(result -> {
-                    if (result.isSuccess()) {
+                    if (result != null && result.isSuccess()) {
                         log.info("权限校验成功");
-                        return chain.filter(exchange)
-                                .doOnSuccess(v -> {//this加不加都行
-                                    this.modifiedResponseBody = (String) exchange.getAttributes().get(GatewayConfig.MODIFIED_RESPONSE_BODY_ATTR);
-                                    if (modifiedResponseBody != null) {
-                                        log.info("SignFilter 获取到改写后的响应体：{}", modifiedResponseBody);
-                                    }
-                                });
+                        return chain.filter(exchange).doOnSuccess(v -> {
+                            responseBodyHolder[0] = (String) exchange.getAttributes().get(GatewayConfig.MODIFIED_RESPONSE_BODY_ATTR);
+                            if (responseBodyHolder[0] != null) {
+                                log.info("SignFilter 获取到改写后的响应体：{}", responseBodyHolder[0]);
+                            }
+                        });
+                    }
+                    log.error("权限校验失败: {}", result == null ? "null result" : result.getMsg());
+                    if (result != null && "鉴权服务暂不可用".equals(result.getMsg())) {
+                        return writeErrorResponse(exchange, HttpStatus.SERVICE_UNAVAILABLE, "鉴权服务暂不可用");
                     } else {
-                        log.error("权限校验失败");
-                        exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
-                        return exchange.getResponse().setComplete();
+                        return writeErrorResponse(exchange, HttpStatus.FORBIDDEN, "权限校验失败");
                     }
                 })
                 // ========== 3. 【整个请求全部结束后】才统计时间 + 发日志 ==========
                 .doFinally(signalType -> {
                     // 总耗时
-                    useTime = System.currentTimeMillis() - startTime;
-                    // ========== 从 Attribute 中获取处理后的请求体 ==========
-                    this.modifiedRequestBody = (String) exchange.getAttributes().get(GatewayConfig.MODIFIED_REQUEST_BODY_ATTR);
+                    long useTime = System.currentTimeMillis() - startTime;
                     if (modifiedRequestBody != null) {
                         log.info("SignFilter 获取到改写后的请求体：{}", modifiedRequestBody);
                     }
 
                     // ---------- 权限成功才发送日志 ----------
                     if (exchange.getResponse().getStatusCode() == HttpStatus.OK) {
-                        System.out.println(modifiedRequestBody+modifiedResponseBody);
-                        sendCallLogToMQ(exchange, userId, interfaceId, accessKey, useTime, modifiedResponseBody,modifiedRequestBody,null);
+                        sendCallLogToMQ(exchange, userId, interfaceId, accessKey, useTime, responseBodyHolder[0], modifiedRequestBody, null);
                     }
                 })
                 .onErrorResume(e -> {
                     log.error("服务异常", e);
-                    errorMsg=e.getMessage();
-                    sendCallLogToMQ(exchange, userId, interfaceId, accessKey, useTime, modifiedResponseBody,modifiedRequestBody,errorMsg);
-                    exchange.getResponse().setStatusCode(HttpStatus.INTERNAL_SERVER_ERROR);
-                    return exchange.getResponse().setComplete();
+                    errorHolder[0] = e.getMessage();
+                    long useTime = System.currentTimeMillis() - startTime;
+                    sendCallLogToMQ(exchange, userId, interfaceId, accessKey, useTime, responseBodyHolder[0], modifiedRequestBody, errorHolder[0]);
+                    return writeErrorResponse(exchange, HttpStatus.SERVICE_UNAVAILABLE, "鉴权服务异常");
                 });
 
+    }
+
+    private Mono<Void> writeErrorResponse(ServerWebExchange exchange, HttpStatus status, String message) {
+        ServerHttpResponse response = exchange.getResponse();
+        response.setStatusCode(status);
+        response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        String body = String.format("{\"code\":%d,\"msg\":\"%s\"}", status.value(), message);
+        DataBuffer buffer = response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
+        return response.writeWith(Mono.just(buffer));
+    }
+
+    private AppAuthInfo queryAppAuthInfo(String sql, String accessKey) {
+        String cacheKey = "cache:app:auth:" + accessKey;
+        String cached = redisTemplate.opsForValue().get(cacheKey);
+        if (StrUtil.isNotBlank(cached)) {
+            String[] parts = cached.split(":", 2);
+            if (parts.length == 2) {
+                return new AppAuthInfo(Long.parseLong(parts[0]), parts[1]);
+            }
+        }
+        Map<String, Object> map = jdbcTemplate.queryForMap(sql, accessKey);
+        long userId = Long.parseLong(map.get("user_id").toString());
+        String secretKey = (String) map.get("secret_key");
+        redisTemplate.opsForValue().set(cacheKey, userId + ":" + secretKey, appAuthCacheTtlSeconds, TimeUnit.SECONDS);
+        return new AppAuthInfo(userId, secretKey);
+    }
+
+    private Integer queryInterfaceId(String sql, String interfacePath) {
+        String cacheKey = "cache:interface:id:" + interfacePath;
+        String cached = redisTemplate.opsForValue().get(cacheKey);
+        if (StrUtil.isNotBlank(cached)) {
+            return Integer.parseInt(cached);
+        }
+        Integer interfaceId = jdbcTemplate.queryForObject(sql, new Object[]{interfacePath}, Integer.class);
+        if (interfaceId != null) {
+            redisTemplate.opsForValue().set(cacheKey, String.valueOf(interfaceId), interfaceCacheTtlSeconds, TimeUnit.SECONDS);
+        }
+        return interfaceId;
+    }
+
+    private record AppAuthInfo(long userId, String secretKey) {
     }
 
     /**
@@ -247,7 +306,7 @@ public class SignFilter implements GlobalFilter, Ordered {
         logDto.setResponseResult(modifiedResponseBody);
 
         // 异步发送！不阻塞网关！
-        rabbitTemplate.convertAndSend(logQueue, logDto);
+        rabbitTemplate.convertAndSend(logExchange, logRoutingKey, logDto);
         log.info("已发送接口调用日志到 MQ: {}", logDto);
     }
 

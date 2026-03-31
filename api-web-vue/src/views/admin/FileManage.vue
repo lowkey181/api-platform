@@ -249,6 +249,7 @@ const getFileTypeName = (fileType?: string ,fileUrl?: string) => {
     if (url.endsWith('.rar')) return 'RAR'
     if (url.endsWith('.7z')) return '7Z'
     if (url.endsWith('.txt')) return 'TXT'
+    if (url.endsWith('.jar')) return 'JAR'
   }
   if (!fileType) return '未知'
 

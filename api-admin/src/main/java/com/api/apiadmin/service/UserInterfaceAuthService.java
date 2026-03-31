@@ -15,6 +15,7 @@ import com.github.yulichang.wrapper.MPJLambdaWrapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
@@ -55,11 +56,12 @@ public class UserInterfaceAuthService extends ServiceImpl<UserInterfaceAuthMappe
                 .eq(UserInterfaceAuth::getUserId, userId)
                 .orderByDesc(UserInterfaceAuth::getCreateTime);
         Page<UserInterfaceAuth> page = new Page<>(pageNum, pageSize);
-        Page<UserInterfaceAuth> result = page(page, wrapper);
+        Page<UserInterfaceAuth> result = userInterfaceAuthMapper.selectJoinPage(page, wrapper);
         return Result.ok(result);
     }
 
     // 调用接口
+    @Transactional(rollbackFor = Exception.class)
     public Result callApi(Long userId, Long interfaceId){
         LambdaQueryWrapper<UserInterfaceAuth> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserInterfaceAuth::getUserId, userId)
@@ -85,8 +87,10 @@ public class UserInterfaceAuthService extends ServiceImpl<UserInterfaceAuthMappe
         if (userInterfaceAuth.getMaxCallCount() != -1 && userInterfaceAuth.getUsedCallCount() >= userInterfaceAuth.getMaxCallCount()){
             return Result.error("接口调用次数已用完");
         }
-        userInterfaceAuth.setUsedCallCount(userInterfaceAuth.getUsedCallCount() + 1);
-        userInterfaceAuthMapper.updateById(userInterfaceAuth);
+        int updated = userInterfaceAuthMapper.increaseUsedCallCountIfAllowed(userInterfaceAuth.getId());
+        if (updated == 0) {
+            return Result.error("接口调用次数已用完或权限状态已变化");
+        }
         return Result.ok("调用接口成功");
     }
 

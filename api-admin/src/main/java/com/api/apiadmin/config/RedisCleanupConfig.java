@@ -25,7 +25,7 @@ public class RedisCleanupConfig {
             StringRedisTemplate redisTemplate) {
         return event -> {
             if (cleanupOnShutdown) {
-                System.out.println("关闭应用，清理Redis数据...");
+                System.out.println("关闭应用，清理Redis登录数据...");
 
                 for (String pattern : cleanupPatterns) {
                     Set<String> keys = redisTemplate.keys(pattern);

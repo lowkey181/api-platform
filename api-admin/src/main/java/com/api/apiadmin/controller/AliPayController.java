@@ -124,10 +124,7 @@ public class AliPayController {
 
         if ("TRADE_SUCCESS".equals(tradeStatus)) {
             try {
-                // 打印公钥信息用于调试
                 String publicKey = alipayTemplate.getAlipayPublicKey();
-                log.info("支付宝公钥长度: {}", publicKey != null ? publicKey.length() : "null");
-                log.info("支付宝公钥前50字符: {}", publicKey != null && publicKey.length() > 50 ? publicKey.substring(0, 50) : publicKey);
                 
                 // 2. 验签 - rsaCheckV1会自动处理sign和sign_type参数
                 boolean signVerified = AlipaySignature.rsaCheckV1(
@@ -140,14 +137,14 @@ public class AliPayController {
                 if (signVerified) {
                     log.info("支付宝验签成功！");
 
-                    // 3. 按照文档要求进行二次校验
+                    // 3. 二次校验
                     if (!alipayTemplate.getAppId().equals(params.get("app_id"))) {
                         log.error("验签失败：appId 不匹配");
                         return "failure";
                     }
 
-                    // TODO: 校验 total_amount 是否与订单金额一致（必须加！防止金额被篡改）
-                    String outTradeNo = params.get("out_trade_no"); // 你的订单号
+                    // 校验 total_amount 是否与订单金额一致，防止金额被篡改
+                    String outTradeNo = params.get("out_trade_no"); // 订单号
                     String alipayTotalAmount = params.get("total_amount"); // 支付宝回调的金额
                     // 从数据库查询原订单，对比金额是否一致
                     OrderInfo dbOrder = orderInfoService.getByOrderNo(outTradeNo);

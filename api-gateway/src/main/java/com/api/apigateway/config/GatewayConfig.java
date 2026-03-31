@@ -92,7 +92,7 @@ public class GatewayConfig {
 
                 // 示例 1：包装统一响应格式
                 String wrapped = String.format(
-                        "{\"code\":200,\"success\":true,\"data\":%s,\"timestamp\":%d,\"path\":\"%s\"}",
+                        "{\"code\":200,\"success\":true,\"data\":\"%s\",\"timestamp\":%d,\"path\":\"%s\"}",
                         body,
                         System.currentTimeMillis(),
                         path

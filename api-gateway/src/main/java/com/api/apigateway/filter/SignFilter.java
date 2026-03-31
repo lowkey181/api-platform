@@ -62,9 +62,9 @@ public class SignFilter implements GlobalFilter, Ordered {
     private long useTime;
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        // ========== 1. 全局记录开始时间（整个请求的起点） ==========
+        // ==========  全局记录开始时间（整个请求的起点） ==========
         long startTime = System.currentTimeMillis();
-        // 获取你原来的 4 个请求头（不变！）
+        // 获取 4 个请求头
         String accessKey = exchange.getRequest().getHeaders().getFirst("accessKey");
         String sign = exchange.getRequest().getHeaders().getFirst("sign");
         String timestamp = exchange.getRequest().getHeaders().getFirst("timestamp");
@@ -72,7 +72,7 @@ public class SignFilter implements GlobalFilter, Ordered {
         String Authorization= exchange.getRequest().getHeaders().getFirst("Authorization");
 
         log.info("接收到请求: accessKey={}, sign={}, timestamp={}, nonce={}", accessKey, sign, timestamp, nonce);
-        // 1. =============黑名单检查=========
+        //  =============黑名单检查=========
         log.info("开始检查黑名单");
         ServerHttpRequest request = exchange.getRequest();
         String clientIp = IpUtil.getClientIp(request);
@@ -103,13 +103,13 @@ public class SignFilter implements GlobalFilter, Ordered {
         }
         log.info("黑名单检查结束,不在黑名单之列");
         //====================================
-        // 1. 判空（不变）
+        // 1. 判空
         if (StrUtil.isBlank(accessKey) || StrUtil.isBlank(sign) || StrUtil.isBlank(timestamp) || StrUtil.isBlank(nonce)) {
             exchange.getResponse().setStatusCode(HttpStatus.BAD_REQUEST);
             return exchange.getResponse().setComplete();
         }
 
-        // 2. 时间戳过期校验（新增！）
+        // 2. 时间戳过期校验
         long currentTime = System.currentTimeMillis();
         long reqTime = Long.parseLong(timestamp);
         if (Math.abs(currentTime - reqTime) > 60000 * 5) { // 超过5分钟过期
@@ -117,7 +117,7 @@ public class SignFilter implements GlobalFilter, Ordered {
             return exchange.getResponse().setComplete();
         }
 
-        // 3. nonce 防重放（核心！新增！）
+        // 3. nonce 防重放
         String nonceKey = "sign:nonce:" + nonce;
         Boolean hasNonce = redisTemplate.hasKey(nonceKey);
         if (hasNonce) {
@@ -126,20 +126,20 @@ public class SignFilter implements GlobalFilter, Ordered {
         }
         redisTemplate.opsForValue().set(nonceKey, "1", 5, TimeUnit.MINUTES);
 
-        // 4. 根据 accessKey 查询 secretKey（你原来的代码，不变）
+        // 4. 根据 accessKey 查询 secretKey
         String sql = "select user_id, secret_key from app where access_key = ? and status = 1";
         String secretKey;
         long userId;
         try {
             Map<String, Object> map = jdbcTemplate.queryForMap(sql, accessKey);
             secretKey = (String) map.get("secret_key");
-            userId = Long.parseLong(map.get("user_id").toString()); // ← 这就是 userId！！！
+            userId = Long.parseLong(map.get("user_id").toString());
         } catch (EmptyResultDataAccessException e) {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
 
-        // 5. 验签（你原来的逻辑，完全不变）
+        // 5. 验签
         Map<String, String> paramMap = new TreeMap<>();
         paramMap.put("accessKey", accessKey);
         paramMap.put("timestamp", timestamp);
@@ -181,17 +181,11 @@ public class SignFilter implements GlobalFilter, Ordered {
                 .flatMap(result -> {
                     if (result.isSuccess()) {
                         log.info("权限校验成功");
-                        // ======================
-                        // 这里只放行！不发日志！不统计时间！
-                        // ======================
-                        // ========== 【新增】在响应阶段获取处理后的响应体 ==========
-                        // 注意：此时响应体可能还未完全生成，需要在响应写入后获取
                         return chain.filter(exchange)
                                 .doOnSuccess(v -> {//this加不加都行
                                     this.modifiedResponseBody = (String) exchange.getAttributes().get(GatewayConfig.MODIFIED_RESPONSE_BODY_ATTR);
                                     if (modifiedResponseBody != null) {
                                         log.info("SignFilter 获取到改写后的响应体：{}", modifiedResponseBody);
-                                        // 可以在这里使用 modifiedResponseBody 进行业务处理
                                     }
                                 });
                     } else {
@@ -202,13 +196,12 @@ public class SignFilter implements GlobalFilter, Ordered {
                 })
                 // ========== 3. 【整个请求全部结束后】才统计时间 + 发日志 ==========
                 .doFinally(signalType -> {
-                    // ---------- 这里才是真正的总耗时！----------
+                    // 总耗时
                     useTime = System.currentTimeMillis() - startTime;
-                    // ========== 【新增】从 Attribute 中获取处理后的请求体 ==========
+                    // ========== 从 Attribute 中获取处理后的请求体 ==========
                     this.modifiedRequestBody = (String) exchange.getAttributes().get(GatewayConfig.MODIFIED_REQUEST_BODY_ATTR);
                     if (modifiedRequestBody != null) {
                         log.info("SignFilter 获取到改写后的请求体：{}", modifiedRequestBody);
-                        // 可以在这里使用 modifiedRequestBody 进行业务处理
                     }
 
                     // ---------- 权限成功才发送日志 ----------

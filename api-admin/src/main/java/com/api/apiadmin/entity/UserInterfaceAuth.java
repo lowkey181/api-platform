@@ -21,4 +21,21 @@ public class UserInterfaceAuth {
     private Integer status;
     private LocalDateTime createTime;
 
+    @TableField(exist = false)
+    private String name;
+
+    @TableField(exist = false)
+    private String description;
+
+    @TableField(exist = false)
+    private String url;
+
+    @TableField(exist = false)
+    private String method;
+
+    @TableField(exist = false)
+    private String requestParams;
+
+    @TableField(exist = false)
+    private String responseResult;
 }

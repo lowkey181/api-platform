@@ -22,7 +22,6 @@ import java.util.Collection;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    // 注入你之前写好的 JwtUtil
     @Resource
     private JwtUtil jwtUtil;
 
@@ -31,7 +30,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
 
-        // 1. 获取请求头 token
+        // 获取请求头 token
         String token_Bearer  = request.getHeader("Authorization");
         System.out.println("token:"+token_Bearer);
         // 没有 token 直接放行，走游客模式
@@ -44,7 +43,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             token = token_Bearer.substring(7);
         }
 
-        // 4. 解析 token
+        // 解析 token
         System.out.println("token开始解析:"+token);
         Claims claims = jwtUtil.parseToken(token);
         if (claims == null) {
@@ -68,7 +67,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
-        // 6. 放行
+        // 放行
         filterChain.doFilter(request, response);
     }
 }

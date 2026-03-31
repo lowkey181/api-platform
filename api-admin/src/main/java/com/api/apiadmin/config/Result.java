@@ -3,10 +3,6 @@ package com.api.apiadmin.config;
 import lombok.Data;
 import lombok.experimental.Accessors;
 
-/**
- * 统一返回结果
- * 所有接口都用这个返回
- */
 @Data
 @Accessors(chain = true)
 public class Result<T> {

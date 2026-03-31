@@ -10,6 +10,8 @@ import com.api.apiadmin.mapper.UserInterfaceAuthMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.github.yulichang.query.MPJLambdaQueryWrapper;
+import com.github.yulichang.wrapper.MPJLambdaWrapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -46,9 +48,12 @@ public class UserInterfaceAuthService extends ServiceImpl<UserInterfaceAuthMappe
     
     public Result selectPage(Integer pageNum, Integer pageSize){
         Long userId = (Long) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        LambdaQueryWrapper<UserInterfaceAuth> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(UserInterfaceAuth::getUserId, userId);
-        wrapper.orderByDesc(UserInterfaceAuth::getCreateTime);
+        MPJLambdaWrapper<UserInterfaceAuth> wrapper = new MPJLambdaWrapper<>();
+        wrapper.selectAll(UserInterfaceAuth.class)
+                .select(ApiInterface::getName, ApiInterface::getDescription,ApiInterface::getUrl,ApiInterface::getMethod,ApiInterface::getRequestParams,ApiInterface::getResponseResult)
+                .leftJoin(ApiInterface.class,ApiInterface::getId,UserInterfaceAuth::getInterfaceId)
+                .eq(UserInterfaceAuth::getUserId, userId)
+                .orderByDesc(UserInterfaceAuth::getCreateTime);
         Page<UserInterfaceAuth> page = new Page<>(pageNum, pageSize);
         Page<UserInterfaceAuth> result = page(page, wrapper);
         return Result.ok(result);

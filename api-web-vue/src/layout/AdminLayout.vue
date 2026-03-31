@@ -32,6 +32,14 @@
           <el-icon><ShoppingCart /></el-icon>
           <span>产品套餐</span>
         </el-menu-item>
+        <el-sub-menu index="file">
+          <template #title>
+            <el-icon><Folder /></el-icon>
+            <span>文件管理</span>
+          </template>
+          <el-menu-item index="/admin/file-upload">文件上传</el-menu-item>
+          <el-menu-item index="/admin/file-manage">文件列表</el-menu-item>
+        </el-sub-menu>
       </el-menu>
     </el-aside>
     <el-container>
@@ -46,7 +54,7 @@
           <el-dropdown @command="handleCommand">
             <span class="el-dropdown-link">
               {{ userStore.userInfo.username }}
-              <el-icon class="el-icon--right"><arrow-down /></el-icon>
+              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
               <el-dropdown-menu>
@@ -68,6 +76,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
+import { Odometer, User, List, Connection, ShoppingCart, Folder, ArrowDown } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()

@@ -60,6 +60,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/admin/Products.vue'),
         meta: { title: '产品套餐' },
       },
+      {
+        path: 'file-upload',
+        name: 'AdminFileUpload',
+        component: () => import('@/views/admin/FileUpload.vue'),
+        meta: { title: '文件上传' },
+      },
+      {
+        path: 'file-manage',
+        name: 'AdminFileManage',
+        component: () => import('@/views/admin/FileManage.vue'),
+        meta: { title: '文件管理' },
+      },
     ],
   },
   {
@@ -96,6 +108,12 @@ const routes: RouteRecordRaw[] = [
         name: 'MyInterfaces',
         component: () => import('@/views/user/MyInterfaces.vue'),
         meta: { title: '我的接口' },
+      },
+      {
+        path: 'files',
+        name: 'UserFileManage',
+        component: () => import('@/views/user/FileManage.vue'),
+        meta: { title: '文件中心' },
       },
     ],
   },

@@ -23,15 +23,15 @@ public class GatewayController {
         String timestamp = request.getTimestamp();
         String nonce = request.getNonce();
 
-        // 1. 根据 accessKey 查 secretKey（数据库里查！）
+        // 根据 accessKey 查 secretKey
         App app = appService.getByAccessKey(accessKey);
-        String secretKey = app.getSecretKey(); // 后端自己拿，绝不返回前端
+        String secretKey = app.getSecretKey();
 
-        // 2. 后端生成签名
+        // 生成签名
         String str = accessKey + timestamp + nonce;
         String sign = HmacSHA256Utils.encrypt(str, secretKey);
 
-        // 3. 只把 sign 返回给前端
+        // 把 sign 返回给前端
         return SaResult.ok(sign);
     }
 }

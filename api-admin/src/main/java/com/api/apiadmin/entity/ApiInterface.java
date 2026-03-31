@@ -17,5 +17,7 @@ public class ApiInterface {
     private String description;
     private Integer status;
     private LocalDateTime createTime;
+    private String requestParams;
+    private String responseResult;
 
 }

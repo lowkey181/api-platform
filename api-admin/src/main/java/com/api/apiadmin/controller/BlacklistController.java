@@ -28,7 +28,9 @@ public class BlacklistController {
         return blacklistService.updateBlacklist(blacklist);
     }
     @RequestMapping("/getPage")
-    public SaResult getPage(@RequestParam(defaultValue = "1") Integer pageNum, @RequestParam(defaultValue = "5") Integer pageSize,Integer status) {
+    public SaResult getPage(@RequestParam(defaultValue = "1") Integer pageNum,
+                            @RequestParam(defaultValue = "5") Integer pageSize,
+                            Integer status) {
         return blacklistService.getPage(pageNum, pageSize,status);
     }
 

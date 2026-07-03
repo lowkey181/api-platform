@@ -10,15 +10,16 @@ spring:
     gateway:
       server:
         webflux:
-          # 路由规则
+          # 路由规则 - 使用负载均衡
           routes:
             # 示例接口服务路由
             - id: api-demo-service
-              uri: http://localhost:9003  # 你的业务接口地址
+              uri: lb://api-service   # 使用 lb:// 协议 + 服务名 # 业务接口地址http://localhost:9003
               predicates:
                 - Path=/api/**
               filters:
                 - StripPrefix=1
+
 
 
           # 全局跨域配置
@@ -33,6 +34,12 @@ spring:
                   - DELETE
                 allowedHeaders: "*"
                 allowCredentials: false
+    # 负载均衡配置
+    loadbalancer:
+      retry:
+        enabled: true
+      zone: default
+
   rabbitmq:
     host: localhost
     port: 5672
@@ -102,7 +109,7 @@ api:
     default-limit-period: 60
     limit-dimension: accessKey
     auth:
-      base-url: http://localhost:9002
+      base-url: http://api-admin  #使用服务名，通过负载均衡调用   http://localhost:9002
       timeout-ms: 1500
     cache:
       app-auth-ttl-seconds: 300

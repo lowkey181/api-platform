@@ -1,0 +1,23 @@
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: nacos:8848
+        namespace: public
+        group: DEFAULT_GROUP
+  datasource:
+    url: jdbc:mysql://mysql:3306/api_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: root
+    password: root
+  rabbitmq:
+    host: rabbitmq
+    port: 5672
+    username: guest
+    password: guest
+app:
+  storage:
+    minio:
+      endpoint: http://minio:9000
+      access-key: minioadmin
+      secret-key: minioadmin
+      bucket: api-platform

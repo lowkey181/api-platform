@@ -60,7 +60,10 @@ public class SignFilter implements GlobalFilter, Ordered {
     private BlackListMapper blackListMapper;
     @Autowired
     private ReactiveCircuitBreakerFactory<?, ?> circuitBreakerFactory;
-    @Value("${api.gateway.auth.base-url:http://localhost:9002}")
+    @Autowired
+    private WebClient.Builder webClientBuilder;
+//    @Value("${api.gateway.auth.base-url:http://localhost:9002}")
+    @Value("${api.gateway.auth.base-url:http://api-admin}")
     private String authBaseUrl;
     @Value("${api.gateway.auth.timeout-ms:1500}")
     private long authTimeoutMs;
@@ -182,10 +185,11 @@ public class SignFilter implements GlobalFilter, Ordered {
         String modifiedRequestBody = (String) exchange.getAttributes().get(GatewayConfig.MODIFIED_REQUEST_BODY_ATTR);
         String[] responseBodyHolder = new String[]{null};
         String[] errorHolder = new String[]{null};
-        WebClient webClient = WebClient.builder().baseUrl(authBaseUrl).build();
+//        WebClient webClient = WebClient.builder().baseUrl(authBaseUrl).build();
         ReactiveCircuitBreaker circuitBreaker = circuitBreakerFactory.create("adminAuth");
 
-        Mono<SaResult> authMono = webClient.post()
+        Mono<SaResult> authMono = webClientBuilder.build()
+                .post()
                 .uri("/userInterfaceAuth/callApi")
                 .header("Content-Type", "application/json")
                 .header("Authorization", Authorization)

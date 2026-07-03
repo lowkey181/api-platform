@@ -69,6 +69,36 @@ api/
 4. 运行 `ApiServiceApplication` (端口: 9003)。
 5. 进入 `api-web-vue` 执行 `npm install` 且 `npm run dev` 启动前端。
 
+## 🐳 Docker 一键启动
+
+项目已集成容器化配置，包含：
+- `api-admin` / `api-gateway` / `api-service` 三个服务 Dockerfile
+- `mysql` / `redis` / `rabbitmq` / `minio` 基础中间件
+- `docker-compose.yml` 一键编排
+
+### 1. 启动
+
+在项目根目录执行：
+
+```bash
+docker compose up -d --build
+```
+
+### 2. 访问端口
+
+- 网关：`http://localhost:8090`
+- 管理后台服务：`http://localhost:9002`
+- 示例服务：`http://localhost:9003`
+- RabbitMQ 管理台：`http://localhost:15672`（`guest/guest`）
+- MinIO 控制台：`http://localhost:9001`（`minioadmin/minioadmin`）
+
+### 3. 注意事项
+
+- 请先初始化 `api_platform` 数据库表结构（`docker-compose` 仅创建库，不自动建表）。
+- 容器环境使用 `docker` profile：
+  - `api-admin/src/main/resources/application-docker.yaml`
+  - `api-gateway/src/main/resources/application-docker.yaml`
+
 ## 🛡️ 安全机制 (签名算法)
 
 所有通过网关的请求必须在 Header 中携带以下参数：

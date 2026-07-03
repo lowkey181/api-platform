@@ -1,0 +1,35 @@
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: nacos:8848
+        namespace: public
+        group: DEFAULT_GROUP
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: api-demo-service
+              uri: lb://api-service  # 使用负载均衡
+              predicates:
+                - Path=/api/**
+              filters:
+                - StripPrefix=1
+  rabbitmq:
+    host: rabbitmq
+    port: 5672
+    username: guest
+    password: guest
+  datasource:
+    url: jdbc:mysql://mysql:3306/api_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: root
+    password: root
+  data:
+    redis:
+      host: redis
+      port: 6379
+api:
+  gateway:
+    auth:
+      base-url: http://api-admin  # 使用服务名，通过负载均衡调用
+      timeout-ms: 1500

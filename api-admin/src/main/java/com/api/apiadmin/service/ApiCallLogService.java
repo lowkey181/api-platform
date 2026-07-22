@@ -19,7 +19,9 @@ public class ApiCallLogService extends ServiceImpl<ApiCallLogMapper, ApiCallLog>
     public SaResult getApiCallLogs(Integer pageNum, Integer pageSize, Long interfaceId, Integer  status,String startDate,
                                    String endDate) {
         MPJLambdaWrapper<ApiCallLog> wrapper = new MPJLambdaWrapper<ApiCallLog>()
-                .selectAll(ApiCallLog.class)
+                .select(ApiCallLog::getId, ApiCallLog::getUserId, ApiCallLog::getAccessKey, ApiCallLog::getInterfaceId, ApiCallLog::getRequestIp)
+                .select(ApiCallLog::getRequestParams, ApiCallLog::getResponseResult, ApiCallLog::getUseTime, ApiCallLog::getStatus, ApiCallLog::getErrorMsg)
+                .select(ApiCallLog::getCreateTime)
                 .eq(ObjectUtil.isNotNull(interfaceId),ApiCallLog::getInterfaceId, interfaceId)
                 .eq(ObjectUtil.isNotNull(status),ApiCallLog::getStatus, status)
                 .ge(StrUtil.isNotBlank(startDate),ApiCallLog::getCreateTime, startDate)

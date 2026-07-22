@@ -11,6 +11,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.github.yulichang.query.MPJLambdaQueryWrapper;
+import com.github.yulichang.toolkit.JoinWrappers;
 import com.github.yulichang.wrapper.MPJLambdaWrapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -46,18 +47,39 @@ public class UserInterfaceAuthService extends ServiceImpl<UserInterfaceAuthMappe
         userInterfaceAuthMapper.deleteById(id);
         return Result.ok("删除成功");
     }
-    
+//    MPJLambdaWrapper<UserDO> wrapper = JoinWrappers.lambda(UserDO.class)
+//            .selectAll(UserDO.class)
+//            .select(AddressDO::getTel)
+//            .leftJoin(AddressDO.class, AddressDO::getUserId, UserDO::getId)
+//            .eq(UserDO::getId, 1)
+//            .like(AddressDO::getTel, "1");
+//
+//    //连表查询 返回自定义ResultType
+//    List<UserDTO> list = userMapper.selectJoinList(UserDTO.class, wrapper);
+//
+//    //分页查询 （需要启用 mybatis plus 分页插件）
+//    Page<UserDTO> listPage = userMapper.selectJoinPage(new Page<>(2, 10), UserDTO.class, wrapper);
+
     public Result selectPage(Integer pageNum, Integer pageSize){
         Long userId = (Long) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        MPJLambdaWrapper<UserInterfaceAuth> wrapper = new MPJLambdaWrapper<>();
-        wrapper.selectAll(UserInterfaceAuth.class)
+        MPJLambdaWrapper<UserInterfaceAuth> wrapper1 = JoinWrappers.lambda(UserInterfaceAuth.class);
+        wrapper1.selectAll(UserInterfaceAuth.class)
                 .select(ApiInterface::getName, ApiInterface::getDescription,ApiInterface::getUrl,ApiInterface::getMethod,ApiInterface::getRequestParams,ApiInterface::getResponseResult)
                 .leftJoin(ApiInterface.class,ApiInterface::getId,UserInterfaceAuth::getInterfaceId)
                 .eq(UserInterfaceAuth::getUserId, userId)
                 .orderByDesc(UserInterfaceAuth::getCreateTime);
+
+
+//        MPJLambdaWrapper<UserInterfaceAuth> wrapper = new MPJLambdaWrapper<>();
+//        wrapper.selectAll(UserInterfaceAuth.class)
+//                .select(ApiInterface::getName, ApiInterface::getDescription,ApiInterface::getUrl,ApiInterface::getMethod,ApiInterface::getRequestParams,ApiInterface::getResponseResult)
+//                .leftJoin(ApiInterface.class,ApiInterface::getId,UserInterfaceAuth::getInterfaceId)
+//                .eq(UserInterfaceAuth::getUserId, userId)
+//                .orderByDesc(UserInterfaceAuth::getCreateTime);
         Page<UserInterfaceAuth> page = new Page<>(pageNum, pageSize);
-        Page<UserInterfaceAuth> result = userInterfaceAuthMapper.selectJoinPage(page, wrapper);
-        return Result.ok(result);
+//        Page<UserInterfaceAuth> result = userInterfaceAuthMapper.selectJoinPage(page, wrapper);
+        Page<UserInterfaceAuth> result1 = userInterfaceAuthMapper.selectJoinPage(page, UserInterfaceAuth.class,wrapper1);
+        return Result.ok(result1);
     }
 
     // 调用接口

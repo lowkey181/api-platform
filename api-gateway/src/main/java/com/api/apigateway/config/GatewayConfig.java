@@ -1,6 +1,7 @@
 package com.api.apigateway.config;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.factory.rewrite.RewriteFunction;
 import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
@@ -15,6 +16,10 @@ import reactor.core.publisher.Mono;
 public class GatewayConfig {
     public static final String MODIFIED_REQUEST_BODY_ATTR = "modifiedRequestBody";
     public static final String MODIFIED_RESPONSE_BODY_ATTR = "modifiedResponseBody";
+
+    @Value("${api.gateway.backend-service-uri:lb://api-service}")
+    private String backendServiceUri;
+
     @Bean
     public RouteLocator customRouteLocator(RouteLocatorBuilder builder) {
         return builder.routes()
@@ -29,7 +34,7 @@ public class GatewayConfig {
                                         MediaType.APPLICATION_JSON_VALUE,
                                         rewriteResponseBody())
                         )
-                        .uri("http://localhost:9003")
+                        .uri(backendServiceUri)
                 )
                 .build();
     }
@@ -49,12 +54,9 @@ public class GatewayConfig {
 
                 log.info("[请求] {} {}，原始请求体：{}", method, path, body);
 
-                // ========== 在这里处理请求体 ==========
+                // 处理请求体
 
-                // 示例 1：简单日志记录（原样返回）
-                // return Mono.just(body);
 
-                // 示例 2：添加自定义字段
                 if (body == null || body.trim().isEmpty()) {
                     log.debug("请求体为空，返回默认空 JSON");
                     return Mono.just("{}");
@@ -62,14 +64,13 @@ public class GatewayConfig {
                 String modified = body.replace("}",
                         ",\"gatewayTime\":" + System.currentTimeMillis() + "}");
 
-                // 示例 3：Base64 解码（如果请求体是 Base64 编码的）
+                // Base64 解码
                 // String decoded = new String(Base64.getDecoder().decode(body), StandardCharsets.UTF_8);
 
                 log.info("[请求] 修改后请求体：{}", modified);
                 // 将修改后的请求体存入 Attribute，供 SignFilter 使用
                 exchange.getAttributes().put(MODIFIED_REQUEST_BODY_ATTR, modified);
 
-                // 必须返回 Mono 对象
                 return Mono.just(modified);
             }
         };
@@ -88,9 +89,9 @@ public class GatewayConfig {
 
                 log.info("[响应] {} 原始响应体：{}", path, body);
 
-                // ========== 在这里处理响应体 ==========
+                //处理响应体
 
-                // 示例 1：包装统一响应格式
+                //包装统一响应格式
                 String wrapped = String.format(
                         "{\"code\":200,\"success\":true,\"data\":\"%s\",\"timestamp\":%d,\"path\":\"%s\"}",
                         body,
@@ -98,11 +99,7 @@ public class GatewayConfig {
                         path
                 );
 
-                // 示例 2：敏感字段脱敏（正则替换手机号）
-                // String desensitized = body.replaceAll("(\\d{3})\\d{4}(\\d{4})", "$1****$2");
 
-                // 示例 3：Base64 编码响应
-                // String encoded = Base64.getEncoder().encodeToString(body.getBytes(StandardCharsets.UTF_8));
 
                 log.info("[响应] 修改后响应体：{}", wrapped);
                 // 将修改后的响应体存入 Attribute，供 SignFilter 使用

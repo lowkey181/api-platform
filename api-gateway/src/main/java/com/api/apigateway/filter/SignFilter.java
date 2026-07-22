@@ -60,10 +60,9 @@ public class SignFilter implements GlobalFilter, Ordered {
     private BlackListMapper blackListMapper;
     @Autowired
     private ReactiveCircuitBreakerFactory<?, ?> circuitBreakerFactory;
-    @Autowired
-    private WebClient.Builder webClientBuilder;
-//    @Value("${api.gateway.auth.base-url:http://localhost:9002}")
-    @Value("${api.gateway.auth.base-url:http://api-admin}")
+//    @Autowired
+//    private WebClient.Builder webClientBuilder;
+    @Value("${api.gateway.auth.base-url:http://localhost:9002}")
     private String authBaseUrl;
     @Value("${api.gateway.auth.timeout-ms:1500}")
     private long authTimeoutMs;
@@ -129,14 +128,13 @@ public class SignFilter implements GlobalFilter, Ordered {
             return exchange.getResponse().setComplete();
         }
 
-        // 3. nonce 防重放
+        // 3. nonce 防重放 (SETNX 原子操作，避免竞态)
         String nonceKey = "sign:nonce:" + nonce;
-        Boolean hasNonce = redisTemplate.hasKey(nonceKey);
-        if (hasNonce) {
+        Boolean setSuccess = redisTemplate.opsForValue().setIfAbsent(nonceKey, "1", 5, TimeUnit.MINUTES);
+        if (Boolean.FALSE.equals(setSuccess)) {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
-        redisTemplate.opsForValue().set(nonceKey, "1", 5, TimeUnit.MINUTES);
 
         // 4. 根据 accessKey 查询 secretKey
         String sql = "select user_id, secret_key from app where access_key = ? and status = 1";
@@ -167,13 +165,18 @@ public class SignFilter implements GlobalFilter, Ordered {
         // ====================== 发送日志到 MQ ======================
         String path = exchange.getRequest().getPath().value();
         String interfacePath = path.replaceFirst("^/api", "");
-        // 例如：/api/random/text
-        String sql2 = "select id from api_interface where url = ? and status = 1";
+
+        // 查询接口信息（含 url_type 区分内部/外部）
+        String sql2 = "select id, url, url_type from api_interface where url = ? and status = 1";
         Integer interfaceId;
+        String targetUrl;
+        int urlType;
         try {
-            interfaceId = queryInterfaceId(sql2, interfacePath);
+            Map<String, Object> interfaceInfo = jdbcTemplate.queryForMap(sql2, interfacePath);
+            interfaceId = (Integer) interfaceInfo.get("id");
+            targetUrl = (String) interfaceInfo.get("url");
+            urlType = ((Number) interfaceInfo.get("url_type")).intValue();
         } catch (EmptyResultDataAccessException e) {
-            // 接口不存在
             exchange.getResponse().setStatusCode(HttpStatus.NOT_FOUND);
             return exchange.getResponse().setComplete();
         }
@@ -188,7 +191,9 @@ public class SignFilter implements GlobalFilter, Ordered {
 //        WebClient webClient = WebClient.builder().baseUrl(authBaseUrl).build();
         ReactiveCircuitBreaker circuitBreaker = circuitBreakerFactory.create("adminAuth");
 
-        Mono<SaResult> authMono = webClientBuilder.build()
+        Mono<SaResult> authMono = WebClient.builder()
+                .baseUrl(authBaseUrl)
+                .build()
                 .post()
                 .uri("/userInterfaceAuth/callApi")
                 .header("Content-Type", "application/json")
@@ -205,6 +210,10 @@ public class SignFilter implements GlobalFilter, Ordered {
                 .flatMap(result -> {
                     if (result != null && result.isSuccess()) {
                         log.info("权限校验成功");
+                        // 外部 URL 直接代理转发，不走内部路由
+                        if (urlType == 2 && targetUrl != null) {
+                            return proxyToExternal(exchange, targetUrl, userId, interfaceId, modifiedRequestBody, responseBodyHolder);
+                        }
                         return chain.filter(exchange).doOnSuccess(v -> {
                             responseBodyHolder[0] = (String) exchange.getAttributes().get(GatewayConfig.MODIFIED_RESPONSE_BODY_ATTR);
                             if (responseBodyHolder[0] != null) {
@@ -240,6 +249,39 @@ public class SignFilter implements GlobalFilter, Ordered {
                     return writeErrorResponse(exchange, HttpStatus.SERVICE_UNAVAILABLE, "鉴权服务异常");
                 });
 
+    }
+
+    private Mono<Void> proxyToExternal(ServerWebExchange exchange, String targetUrl,
+                                        long userId, int interfaceId,
+                                        String modifiedRequestBody,
+                                        String[] responseBodyHolder) {
+        ServerHttpRequest request = exchange.getRequest();
+        String method = request.getMethod().name();
+
+        if (!"GET".equalsIgnoreCase(method)) {
+            return writeErrorResponse(exchange, HttpStatus.METHOD_NOT_ALLOWED,
+                    "外部接口仅支持 GET 请求");
+        }
+
+        WebClient.RequestBodySpec requestSpec = WebClient.create()
+                .method(org.springframework.http.HttpMethod.valueOf(method))
+                .uri(targetUrl)
+                .headers(headers -> headers.addAll(request.getHeaders()));
+
+        return requestSpec
+                .retrieve()
+                .bodyToMono(String.class)
+                .map(body -> { responseBodyHolder[0] = body; return body; })
+                .flatMap(body -> setResponseAndComplete(exchange, body))
+                .doOnError(e -> log.error("代理外部接口失败: {}", targetUrl, e));
+    }
+
+    private Mono<Void> setResponseAndComplete(ServerWebExchange exchange, String body) {
+        ServerHttpResponse response = exchange.getResponse();
+        response.setStatusCode(HttpStatus.OK);
+        response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        DataBuffer buffer = response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
+        return response.writeWith(Mono.just(buffer));
     }
 
     private Mono<Void> writeErrorResponse(ServerWebExchange exchange, HttpStatus status, String message) {
@@ -309,7 +351,7 @@ public class SignFilter implements GlobalFilter, Ordered {
         logDto.setRequestParams(modifiedRequestBody);
         logDto.setResponseResult(modifiedResponseBody);
 
-        // 异步发送！不阻塞网关！
+        // 异步发送
         rabbitTemplate.convertAndSend(logExchange, logRoutingKey, logDto);
         log.info("已发送接口调用日志到 MQ: {}", logDto);
     }

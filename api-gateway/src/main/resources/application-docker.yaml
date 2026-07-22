@@ -5,16 +5,6 @@ spring:
         server-addr: nacos:8848
         namespace: public
         group: DEFAULT_GROUP
-    gateway:
-      server:
-        webflux:
-          routes:
-            - id: api-demo-service
-              uri: lb://api-service  # 使用负载均衡
-              predicates:
-                - Path=/api/**
-              filters:
-                - StripPrefix=1
   rabbitmq:
     host: rabbitmq
     port: 5672
@@ -33,3 +23,4 @@ api:
     auth:
       base-url: http://api-admin  # 使用服务名，通过负载均衡调用
       timeout-ms: 1500
+      backend-service-uri: lb://api-service  # Docker 环境使用服务发现

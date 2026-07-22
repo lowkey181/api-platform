@@ -164,31 +164,50 @@ const startChunkUpload = async (file: File) => {
     const uploadedChunks = new Set<number>(uploadedChunksRes.data as number[])
     console.log('已上传的分片:', uploadedChunks)
     
-    // 6. 上传分片
+    // 6. 上传分片（并发 + 重试）
     const blobSlice = File.prototype.slice || (File as any).prototype.mozSlice || (File as any).prototype.webkitSlice
     let uploadedCount = uploadedChunks.size
-    
+
+    const maxConcurrent = 3  // 并发上传数
+    const maxRetries = 3     // 单分片最大重试次数
+
+    // 待上传分片列表
+    const pendingChunks: number[] = []
     for (let i = 0; i < totalChunks; i++) {
-      // 跳过已上传的分片
-      if (uploadedChunks.has(i)) {
-        updateProgress(progressIndex, Math.round(((i + 1) / totalChunks) * 100), '')
-        continue
+      if (!uploadedChunks.has(i)) {
+        pendingChunks.push(i)
       }
-      
-      const start = i * props.chunkSize
-      const end = Math.min(start + props.chunkSize, file.size)
-      const chunk = blobSlice.call(file, start, end)
-      
-      // 上传分片
-      const uploadRes = await chunkUploadApi.uploadChunk(uploadId, i, fileMd5, chunk)
-      
-      if (uploadRes.code !== 200) {
-        throw new Error(`分片 ${i} 上传失败：${uploadRes.msg}`)
+    }
+
+    // 并发上传一批分片
+    const uploadOneChunk = async (chunkIndex: number): Promise<void> => {
+      for (let retry = 0; retry < maxRetries; retry++) {
+        try {
+          const start = chunkIndex * props.chunkSize
+          const end = Math.min(start + props.chunkSize, file.size)
+          const chunk = blobSlice.call(file, start, end)
+          const uploadRes = await chunkUploadApi.uploadChunk(uploadId, chunkIndex, fileMd5, chunk)
+          if (uploadRes.code === 200) return
+          throw new Error(uploadRes.msg || `HTTP ${uploadRes.code}`)
+        } catch (err) {
+          if (retry < maxRetries - 1) {
+            console.warn(`分片 ${chunkIndex} 第 ${retry + 1} 次重试`)
+          } else {
+            throw new Error(`分片 ${chunkIndex} 上传失败：已重试 ${maxRetries} 次`)
+          }
+        }
       }
-      
-      uploadedCount++
-      const percent = Math.round((uploadedCount / totalChunks) * 100)
-      updateProgress(progressIndex, percent, '')
+    }
+
+    // 分批并发执行
+    for (let i = 0; i < pendingChunks.length; i += maxConcurrent) {
+      const batch = pendingChunks.slice(i, i + maxConcurrent)
+      await Promise.all(batch.map(async (chunkIndex) => {
+        await uploadOneChunk(chunkIndex)
+        uploadedCount++
+        const percent = Math.round((uploadedCount / totalChunks) * 100)
+        updateProgress(progressIndex, percent, '')
+      }))
     }
     
     // 7. 合并分片

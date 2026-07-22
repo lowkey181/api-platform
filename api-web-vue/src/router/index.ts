@@ -104,10 +104,22 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'API市场' },
       },
       {
+        path: 'my-publish',
+        name: 'MyPublish',
+        component: () => import('@/views/user/MyPublish.vue'),
+        meta: { title: '我的发布' },
+      },
+      {
         path: 'my-interfaces',
         name: 'MyInterfaces',
         component: () => import('@/views/user/MyInterfaces.vue'),
-        meta: { title: '我的接口' },
+        meta: { title: '我的授权' },
+      },
+      {
+        path: 'publish-interface',
+        name: 'PublishInterface',
+        component: () => import('@/views/user/PublishInterface.vue'),
+        meta: { title: '发布接口' },
       },
       {
         path: 'files',

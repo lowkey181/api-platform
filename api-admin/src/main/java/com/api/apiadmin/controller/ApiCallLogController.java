@@ -3,6 +3,7 @@ package com.api.apiadmin.controller;
 import com.api.apiadmin.config.SaResult;
 import com.api.apiadmin.service.ApiCallLogService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -23,6 +24,7 @@ public class ApiCallLogController {
      * @param endDate 结束日期
      * @return 接口调用日志列表
      */
+    @GetMapping
     public SaResult getApiCallLogs(@RequestParam(defaultValue = "1") Integer pageNum,
                                    @RequestParam(defaultValue = "10") Integer pageSize,
                                    Long interfaceId,

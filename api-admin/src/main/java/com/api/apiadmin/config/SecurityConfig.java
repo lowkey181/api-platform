@@ -41,8 +41,13 @@ public class SecurityConfig {
                         .requestMatchers("/alipay/**").permitAll()
                         .requestMatchers("/user/register").permitAll()
                         .requestMatchers("/userInterfaceAuth/callApi").permitAll()
-                        .requestMatchers("/public/**").permitAll() // 👈 所有/public接口=游客可访问
-                        .anyRequest().authenticated() // 其他必须登录
+                        .requestMatchers("/public/**").permitAll()
+                        .requestMatchers("/actuator/**").permitAll()
+                        .requestMatchers("/v3/api-docs/**").permitAll()
+                        .requestMatchers("/swagger-ui/**").permitAll()
+                        .requestMatchers("/doc.html").permitAll()
+                        .requestMatchers("/webjars/**").permitAll()
+                        .anyRequest().authenticated()
                 );
 
         // 添加JWT过滤器

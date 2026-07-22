@@ -29,7 +29,7 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
         String accessKey = exchange.getRequest().getHeaders().getFirst("accessKey");
         String key = buildLimitKey(exchange, accessKey);
 
-        boolean allow = redisLimitUtil.tryAcquire(key, defaultLimitCount, defaultLimitPeriod);
+        boolean allow = redisLimitUtil.tryAcquire(key, defaultLimitCount, defaultLimitPeriod * 1000L);
         if (!allow) {
             exchange.getResponse().setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
             return exchange.getResponse().setComplete();

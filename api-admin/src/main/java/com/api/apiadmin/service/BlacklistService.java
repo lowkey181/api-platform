@@ -89,7 +89,8 @@ public class BlacklistService extends ServiceImpl<BlacklistMapper, Blacklist> {
             redisAddIpAccess();
         }
         MPJLambdaWrapper<Blacklist> wrapper = new MPJLambdaWrapper<Blacklist>()
-                .selectAll()
+                .select(Blacklist::getId, Blacklist::getAccessKey, Blacklist::getIp, Blacklist::getReason, Blacklist::getStatus)
+                .select(Blacklist::getCreateTime)
                 .eq(Blacklist::getStatus, status);
         Page<Blacklist> page = new Page<>(pageNum, pageSize);
         Page<Blacklist> pageResult = blacklistMapper.selectJoinPage(page, Blacklist.class, wrapper);

@@ -56,6 +56,16 @@ public class UserService extends ServiceImpl<UserMapper, User> {
     
     public Result logout(HttpServletRequest request) {
         Long userId = (Long) request.getAttribute("userId");
+
+        // 将 token 加入黑名单（主动失效）
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7);
+            String blacklistKey = "jwt:blacklist:" + token;
+            // 以 token 剩余过期时间为 TTL，避免无效 key 残留
+            redisTemplate.opsForValue().set(blacklistKey, "1", 2, TimeUnit.HOURS);
+        }
+
         String redisKey = "login:user:" + userId;
         redisTemplate.delete(redisKey);
         return Result.ok("退出成功");

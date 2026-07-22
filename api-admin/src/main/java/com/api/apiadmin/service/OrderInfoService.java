@@ -45,7 +45,9 @@ public class OrderInfoService extends ServiceImpl<OrderInfoMapper, OrderInfo> {
 
     public OrderInfo getByOrderNo(String orderNo){
         MPJLambdaWrapper<OrderInfo> wrapper = new MPJLambdaWrapper<OrderInfo>()
-                .selectAll(OrderInfo.class)
+                .select(OrderInfo::getId, OrderInfo::getOrderNo, OrderInfo::getUserId, OrderInfo::getInterfaceId, OrderInfo::getProductId)
+                .select(OrderInfo::getTotalAmount, OrderInfo::getPayStatus, OrderInfo::getPayTime, OrderInfo::getPaymentMethod, OrderInfo::getCreateTime)
+                .select(OrderInfo::getTradeNo)
                 .eq(OrderInfo::getOrderNo, orderNo);
         return orderInfoMapper.selectOne(wrapper);
     }

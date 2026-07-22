@@ -8,6 +8,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -24,6 +25,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Resource
     private JwtUtil jwtUtil;
+    @Resource
+    private RedisTemplate<String, String> redisTemplate;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -53,6 +56,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
         Long userId = Long.parseLong(claims.getSubject());
         String role = claims.get("role", String.class);
+
+        // 检查 token 是否已被主动失效（Redis 黑名单）
+        String blacklistKey = "jwt:blacklist:" + token;
+        if (Boolean.TRUE.equals(redisTemplate.hasKey(blacklistKey))) {
+            response.setStatus(401);
+            System.out.println("token 已被主动失效401");
+            return;
+        }
         System.out.println("userId"+userId+"role"+role+"username"+claims.get("username",String.class));
 
         Collection<GrantedAuthority> authorities = new ArrayList<>();

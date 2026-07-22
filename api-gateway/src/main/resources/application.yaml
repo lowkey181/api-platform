@@ -6,21 +6,22 @@ server:
 spring:
   application:
     name: api-gateway
+  management:
+    endpoints:
+      web:
+        exposure:
+          include: health,info,prometheus
+        base-path: /actuator
+    endpoint:
+      health:
+        show-details: always
   cloud:
     gateway:
       server:
         webflux:
-          # 路由规则 - 使用负载均衡
-          routes:
-            # 示例接口服务路由
-            - id: api-demo-service
-              uri: lb://api-service   # 使用 lb:// 协议 + 服务名 # 业务接口地址http://localhost:9003
-              predicates:
-                - Path=/api/**
-              filters:
-                - StripPrefix=1
-
-
+          # 路由由 GatewayConfig.java 中 customRouteLocator 定义
+          # 使用 api.gateway.backend-service-uri 配置目标服务地址
+          # 本地开发：http://localhost:9003，Docker/生产：lb://api-service
 
           # 全局跨域配置
           globalcors:
@@ -109,11 +110,12 @@ api:
     default-limit-period: 60
     limit-dimension: accessKey
     auth:
-      base-url: http://api-admin  #使用服务名，通过负载均衡调用   http://localhost:9002
-      timeout-ms: 1500
+      base-url: http://localhost:9002  #使用服务名，通过负载均衡调用（暂时没做）   http://localhost:9002   http://api-admin
+      timeout-ms: 5000
     cache:
       app-auth-ttl-seconds: 300
       interface-ttl-seconds: 300
+    backend-service-uri: http://localhost:9003  # 本地开发用 localhost；Docker 环境改为 lb://api-service
 
 resilience4j:
   circuitbreaker:
